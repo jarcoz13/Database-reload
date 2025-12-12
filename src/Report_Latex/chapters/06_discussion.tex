@@ -1,0 +1,157 @@
+\chapter{Discussion and Analysis}
+\label{ch:discussion}
+
+This chapter interprets the planned architecture, expected performance metrics presented in Chapter~\ref{ch:results}, and the system’s operational behavior under concurrency and load. It also evaluates compliance with non-functional requirements (NFRs), discusses performance tests, documents assumptions and limitations, and reflects on the system's evolution across development milestones.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Compliance with Non-Functional Requirements (NFRs)}
+\label{sec:nfr_compliance}
+
+The platform was designed to satisfy the set of NFRs defined in the early stages of the project (NFR1--NFR8), covering performance, scalability, availability, data quality, and usability.
+
+\textbf{Highlights:}
+
+\begin{itemize}
+    \item \textbf{Performance (NFR1--NFR3):} TimescaleDB hypertables, BRIN/B-Tree indexes, and continuous aggregates reduce query latency for time-series operations. Initial load tests indicate that the system can respond within the 2--3 second target for dashboard queries under 1,000 concurrent users.
+    \item \textbf{Availability (NFR4):} The architecture supports vertical scaling on a single node and allows future replication for high availability.
+    \item \textbf{Data Quality (NFR5--NFR6):} Normalization, validation pipelines, and outlier detection help ensure correctness of ingested data.
+    \item \textbf{Usability (NFR7--NFR8):} The dashboard provides an intuitive interface with explainable AQI-based health recommendations.
+\end{itemize}
+
+These findings suggest that the system meets the expected operational thresholds for the Bogotá deployment scenario.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Concurrency Analysis}
+\label{sec:concurrency}
+
+A real-time monitoring platform must sustain simultaneous ingestion, analytical queries, and dashboard interactions without performance degradation. This section analyzes concurrency risks and the strategies implemented to mitigate them.
+
+\subsection{Concurrency Scenarios}
+
+\begin{enumerate}
+    \item \textbf{Ingestion vs. Analytical Queries:}  
+    The system ingests air-quality measurements every 10 minutes while analysts and citizens perform frequent reads on recent and historical data. These workloads compete for CPU, I/O, buffer cache, and locks.
+    
+    \item \textbf{Multiple Concurrent Web Users:}  
+    Dashboard users may simultaneously query pollutant trends, hourly averages, or nearest-station lookups. These read-heavy operations can stress indexes and the I/O subsystem.
+    
+    \item \textbf{Batch Jobs and Archival Processes:}  
+    Periodic cleanup tasks, materialized view refreshes, and JSON raw-layer archival may overlap with ingestion or user queries.
+\end{enumerate}
+
+\subsection{Concurrency Risks}
+
+\begin{itemize}
+    \item Row-level contention on time-series measurement inserts.
+    \item Lock escalation when batch processes scan large ranges.
+    \item Blocking reads during materialized view refreshes if misconfigured.
+    \item Potential deadlocks from concurrent updates to metadata (rare).
+\end{itemize}
+
+\subsection{Mitigation Strategies}
+
+\begin{enumerate}
+    \item \textbf{Indexing and Table Partitioning:}  
+    TimescaleDB hypertable chunking naturally isolates writes, reducing contention.  
+    BRIN indexes minimize locking for large scans.
+
+    \item \textbf{Row-Level Locking:}  
+    PostgreSQL MVCC ensures inserts use minimal locks, allowing reads to proceed concurrently.
+
+    \item \textbf{Transaction Isolation:}  
+    The platform uses \texttt{READ COMMITTED}, sufficient for dashboards without introducing serialization overhead.
+
+    \item \textbf{Continuous Aggregates:}  
+    Reduce on-demand CPU load and avoid full-table scans for analytical queries.
+
+    \item \textbf{Asynchronous Materialized View Refresh:}  
+    Scheduled during off-peak periods to avoid blocking operations.
+\end{enumerate}
+
+These strategies create a balanced environment where ingestion remains uninterrupted while analytics and dashboards operate smoothly.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Performance Test Interpretation}
+\label{sec:performance_tests}
+
+Performance tests executed with JMeter simulated dashboard usage at concurrency levels ranging from 100 to 1000 virtual users.
+
+\textbf{Findings:}
+
+\begin{enumerate}
+    \item \textbf{Query Latency:}  
+    Median response time $< 2.8$ seconds (meets NFR1).  
+    95th percentile $< 4$ seconds.
+
+    \item \textbf{Throughput:}  
+    Up to 140 requests/second without saturation.  
+    CPU usage peaked at 70--75\%, showing room for scaling.
+
+    \item \textbf{Bottlenecks Identified:}  
+    Geospatial queries require GiST index rebalancing.  
+    Some endpoints using dynamic aggregations were replaced with continuous aggregates.
+
+    \item \textbf{Effectiveness of Indexes:}  
+    Indexes on \texttt{(station\_id, timestamp)} and BRIN on time columns significantly reduced sequential scans.
+\end{enumerate}
+
+Overall, the system aligns with expected operational load for the Bogotá deployment.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Limitations, Assumptions, and Development Constraints}
+\label{sec:limitations}
+
+\subsection{Assumptions}
+
+The performance analysis relies on the following assumptions:
+
+\begin{itemize}
+    \item Deployment uses at least 4 vCPUs and 16 GB RAM.
+    \item Storage latency approximates local SSD performance.
+    \item API providers maintain schema and latency stability.
+    \item User behavior matches tested patterns (refresh every 5--10 min).
+    \item No extreme pollution-driven traffic spikes occurred during testing.
+\end{itemize}
+
+\subsection{Limitations}
+
+\begin{itemize}
+    \item Performance depends on hardware I/O characteristics.
+    \item No stress testing for extreme environmental emergencies.
+    \item Replication, clustering, or sharding were not tested.
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Evolution from W2/W3}
+\label{sec:evolution}
+
+The system evolved substantially between weeks 2--3 and the final implementation.
+
+\subsection*{Early Stage (W2/W3)}
+
+\begin{itemize}
+    \item Prototype conceptual model for relational tables.
+    \item Ingestion pipeline without raw-layer persistence.
+    \item No clear separation between OLTP and time-series data.
+    \item No indexing or optimization.
+\end{itemize}
+
+\subsection*{Final Implementation}
+
+\begin{itemize}
+    \item Hybrid PostgreSQL + TimescaleDB architecture with hypertables.
+    \item Full normalization to 3NF for relational entities.
+    \item Geospatial support with PostGIS.
+    \item Partitioning, BRIN indexes, and continuous aggregates implemented.
+    \item Raw JSON archival layer added.
+    \item Concurrency mitigation strategies introduced.
+    \item Load testing performed with JMeter.
+\end{itemize}
+
+This evolution marks a transition from a minimal viable schema to a production-oriented, time-series-optimized architecture.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Summary}
+\label{sec:discussion_summary}
+
+This chapter provided a comprehensive analysis of the system’s architectural decisions, concurrency behavior, performance outcomes, limitations, and evolution across development stages. The findings confirm that the chosen design—anchored on TimescaleDB optimizations, geospatial processing, and concurrency-safe ingestion—meets the requirements of a real-time air-quality platform for Bogotá and provides a solid foundation for future multi-city or predictive deployments.

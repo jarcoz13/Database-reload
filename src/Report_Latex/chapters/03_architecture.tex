@@ -1,0 +1,387 @@
+\chapter{System and Data Architecture}
+\label{ch:architecture}
+
+This chapter describes the comprehensive system architecture and data design that implements the functional and non-functional requirements outlined in Chapter~\ref{ch:background}. The architecture follows a layered approach with clear separation of concerns: clients and web frontend, API layer, data persistence layer, and batch processing jobs. The data model is organized into four logical components reflecting different functional areas: Geospatial \& Monitoring, Users \& Access Control, Alerts \& Recommendations, and Reporting \& Analytics.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{System Architecture Overview}
+\label{sec:arch_overview}
+
+The Air Quality Platform adopts a simplified, layered architecture designed to meet requirements without introducing unnecessary operational complexity. The system is organized into five main components:
+
+\subsection{Architecture Layers}
+
+\subsubsection{Clients and Web Frontend}
+A single responsive web application serves as the primary client interface, providing tailored views for three distinct user roles:
+\begin{itemize}
+    \item \textbf{Citizens:} Seeking real-time air quality information and personalized health recommendations.
+    \item \textbf{Researchers:} Analyzing historical trends, downloading datasets for offline analysis.
+    \item \textbf{Technical Administrators:} Managing platform configuration, user accounts, and operational monitoring.
+\end{itemize}
+
+The unified frontend built with modern web technologies (React/Vue, TypeScript, responsive design) eliminates the need for separate mobile applications or dedicated business intelligence tools as first-class system components.
+
+\subsubsection{API Layer}
+The platform exposes two REST-based JSON-over-HTTP endpoints:
+
+\begin{itemize}
+    \item \textbf{Public REST API:} Serves citizen and researcher requests for air quality data, historical trends, custom report generation, and user alerts.
+    
+    \item \textbf{Admin REST API:} Provides administrative functionality for system configuration, user and role management, operational monitoring, and audit log access.
+\end{itemize}
+
+GraphQL was intentionally excluded to maintain simplicity and reduce the learning curve for the development team. Both APIs implement role-based access control (RBAC) to ensure citizens cannot access administrative features and administrators can monitor all system operations.
+
+\subsubsection{Data Persistence Layer}
+The data persistence layer splits responsibilities between two complementary stores:
+
+\begin{itemize}
+    \item \textbf{PostgreSQL (Primary Operational and Analytical Database):} Stores structured, long-lived business data including stations, raw air quality readings, users, roles, alerts, recommendations, and daily aggregates. The schema adheres to Third Normal Form (3NF) with strong consistency guarantees, referential integrity constraints, and support for complex analytical queries. Monthly-partitioned tables on timestamp columns enable efficient pruning during time-window queries.
+    
+    \item \textbf{NoSQL Document Store (Preferences and Dashboards):} Stores semi-structured, rapidly-evolving user-specific configuration data such as dashboard layouts, theme preferences, favorite locations, and alert settings. This separation avoids cluttering the relational schema with JSONB fields and leverages the schema-less flexibility of NoSQL for user-driven customization. MongoDB or Azure Cosmos DB are suitable implementations.
+\end{itemize}
+
+\subsubsection{Batch Processing Jobs}
+Scheduled jobs operate independently of user-facing APIs to ingest, transform, and aggregate data:
+
+\begin{itemize}
+    \item \textbf{Ingestion Job:} Executes on a configurable schedule (typically 10--60 minutes) to poll external air quality APIs (AQICN, Google, IQAir), fetch raw JSON payloads, and pass them to the validation pipeline.
+    
+    \item \textbf{Normalizer and Validator:} Performs critical transformations on ingested payloads:
+    \begin{itemize}
+        \item Validates schema presence and data type compatibility.
+        \item Normalizes station identifiers, timestamps to UTC, and pollutant units to canonical forms (e.g., $\mu$g/m$^3$).
+        \item Deduplicates readings based on (station\_id, pollutant\_id, timestamp) uniqueness constraints.
+        \item Persists raw JSON payloads to MinIO object storage for audit trails and replay capability (future enhancement).
+        \item Inserts or updates normalized readings into the PostgreSQL \texttt{AirQualityReading} table.
+    \end{itemize}
+    
+    \item \textbf{Daily Aggregation Job:} Executes once per day (typically during off-peak hours) to compute per-day, per-station, per-pollutant aggregates (minimum, maximum, average, 95th percentile). Results populate the \texttt{AirQualityDailyStats} analytical table, which accelerates dashboard and reporting queries by eliminating full-table scans over millions of raw readings.
+\end{itemize}
+
+\subsubsection{Application Logs and Observability}
+A lightweight centralized logging component collects structured logs from all services (Public API, Admin API, Ingestion Job, Normalizer, Daily Aggregation). Logs capture ingestion metrics, API latency, data validation errors, and system health, enabling operational visibility without requiring complex ETL pipelines or dedicated log-aggregation stacks (Elasticsearch, Splunk) outside the project scope.
+
+\subsection{System Component Interactions}
+
+Figure~\ref{fig:architecture_overview} illustrates the relationships between system components. Clients interact with the web frontend, which consumes the Public or Admin REST APIs via standard HTTPS. These APIs query both PostgreSQL (for relational data) and the NoSQL store (for user preferences). Meanwhile, batch jobs operate independently on a schedule, ingesting and transforming data, writing logs to the Application Logs component for operational visibility.
+
+\begin{figure}[H]
+  \centering
+  \fboxsep=2mm
+  \boxed{\parbox{0.95\textwidth}{
+    \textbf{High-Level System Architecture}\\[0.3cm]
+    \small
+    \begin{tabular}{ll}
+      \textbf{CLIENT LAYER} & Citizen Web, Researcher, Admin clients \\
+      $\downarrow$ & \\
+      \textbf{PRESENTATION} & Single responsive web frontend (React/Vue + TypeScript) \\
+      $\downarrow$ & \\
+      \textbf{API LAYER} & Public REST (citizens \& researchers) + Admin REST \\
+      $\downarrow \quad \downarrow$ & \\
+      \textbf{DATA LAYER} & PostgreSQL + TimescaleDB (operational) | NoSQL (preferences) \\
+      & \\
+      \textbf{BATCH LAYER} & External APIs $\rightarrow$ Ingestion Job $\rightarrow$ Normalizer $\rightarrow$ PostgreSQL \\
+      & Daily Aggregation Job computes \texttt{AirQualityDailyStats} \\
+      & \\
+      \textbf{OBSERVABILITY} & Structured application logs from all services \\
+    \end{tabular}
+  }}
+  \caption{High-level system architecture with six layers: Client, Presentation, API, Data, Batch Processing, and Observability. Detailed diagrams available in \texttt{docs/Database\_Architecture/Database\_Architecture.mermaid} and \texttt{docs/Diagram\_ER/Diagram\_ER.dbml}.}
+  \label{fig:architecture_overview}
+\end{figure}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Data Model and Schema Design}
+\label{sec:arch_datamodel}
+
+The Air Quality Platform's data model is organized into four logical components reflecting different functional areas of the system. The relational schema handles structured, long-lived business data, while a separate NoSQL store manages highly dynamic user-specific configurations.
+
+\subsection{Four Data Components}
+
+\subsubsection{Component 1: Geospatial \& Monitoring}
+Manages monitoring stations, pollutants, and raw air quality measurements.
+
+\begin{itemize}
+    \item \textbf{Station:} Records geographic and operational details (country, city, latitude, longitude, station name, provider association). Serves as the primary entity for spatial data filtering.
+    
+    \item \textbf{Pollutant:} Defines pollutant types (PM$_{2.5}$, PM$_{10}$, NO$_2$, O$_3$, SO$_2$, CO) and their measurement units. Enables pollutant-specific filtering and analysis.
+    
+    \item \textbf{Provider:} Records external data sources (AQICN, Google Air Quality API, IQAir) with API endpoints, authentication credentials (encrypted), and ingestion frequency. Tracks data provenance for audit purposes.
+    
+    \item \textbf{AirQualityReading:} The primary fact table storing raw sensor readings with monthly temporal partitioning. Each record captures timestamp (UTC), station, pollutant, concentration value, AQI index, and provider. Monthly partitioning limits full-table scans during time-windowed queries.
+    
+    \item \textbf{MapRegion:} Defines geographic regions or administrative boundaries (e.g., city zones) for aggregated reporting and map visualizations.
+\end{itemize}
+
+\subsubsection{Component 2: Users \& Access Control}
+Handles user accounts, roles, and permissions for multi-tenant authorization.
+
+\begin{itemize}
+    \item \textbf{AppUser:} Stores registered users (renamed from \texttt{User} to avoid PostgreSQL reserved-word conflicts) with profile information (name, email, phone), hashed password, registration date, and status (active/inactive).
+    
+    \item \textbf{Role:} Defines distinct user roles (Citizen, Researcher, Administrator) with descriptive names and permissions scopes.
+    
+    \item \textbf{Permission:} Granular permissions (e.g., \texttt{view\_current\_aqi}, \texttt{download\_historical\_data}, \texttt{configure\_alerts}, \texttt{manage\_users}) enabling flexible authorization policies.
+    
+    \item \textbf{RolePermission:} Junction table establishing many-to-many relationships between roles and permissions, allowing flexible permission assignment.
+\end{itemize}
+
+\subsubsection{Component 3: Alerts \& Recommendations}
+Supports user-configured alerts and health-oriented suggestions based on air quality thresholds.
+
+\begin{itemize}
+    \item \textbf{Alert:} Records user-defined thresholds (e.g., "notify me if PM$_{2.5}$ exceeds 150 $\mu$g/m³ in Bogotá"). Includes trigger conditions, notification channels (email, in-app), and recurrence rules.
+    
+    \item \textbf{Recommendation:} Stores system-generated health guidance linked to detected air quality conditions (e.g., "Air quality is unhealthy; consider wearing an N95 mask and limiting outdoor activities").
+    
+    \item \textbf{ProductRecommendation:} Associates products (e.g., air filters, masks) with recommendations, enabling users to discover protective gear when needed. This table supports future e-commerce integrations.
+\end{itemize}
+
+\subsubsection{Component 4: Reporting \& Analytics}
+Supports analytical and reporting workflows.
+
+\begin{itemize}
+    \item \textbf{Report:} Stores metadata for user-generated reports (parameters: city, date range, station, pollutant filters; file path for exported CSV/PDF documents).
+    
+    \item \textbf{AirQualityDailyStats:} An analytical table containing pre-aggregated daily statistics per station and pollutant (average, maximum, minimum, 95th percentile AQI values, and reading counts). This aggregation table supports efficient business intelligence queries and dashboard visualizations without repeatedly scanning the raw \texttt{AirQualityReading} table. Adding approximately 150 rows per day yields 50,000--60,000 rows over a 3-year retention period.
+\end{itemize}
+
+\subsection{NoSQL Data Model for Preferences and Dashboards}
+
+To avoid storing semi-structured, frequently changing configuration data in the relational schema, the platform uses a separate NoSQL document store with two specific collections:
+
+\begin{itemize}
+    \item \textbf{user\_preferences:} Stores per-user settings such as UI theme (light/dark mode), default city for dashboard views, favorite pollutants to monitor, notification channels, language preferences, and other customizable options. This data changes frequently based on user interactions and does not require relational integrity constraints.
+    
+    \item \textbf{dashboard\_configs:} Stores dashboard layout configurations, including widget positions, visibility settings, chart types, and time range preferences. This allows users to personalize their analytics dashboards without impacting the relational schema.
+\end{itemize}
+
+This design removes JSON fields from the relational model (which would complicate querying and schema evolution) and leverages the flexibility of NoSQL databases for schema-less, rapidly evolving configuration data.
+
+\subsection{Entity Overview and Relationships}
+\label{subsec:arch_entities}
+
+The complete relational schema comprises 14 entities organized across the four components (with details in Table~\ref{tab:entity_overview}). Foreign keys enforce referential integrity between:
+\begin{itemize}
+    \item Readings → Station, Pollutant, Provider
+    \item Alerts, Recommendations → AppUser, Station, Pollutant
+    \item RolePermission → Role, Permission
+    \item Report → AppUser, Station, Pollutant
+    \item ProductRecommendation → Recommendation
+\end{itemize}
+
+These constraints prevent orphaned records and maintain data quality. The operational entities (Station, AirQualityReading, AppUser, Alert, Recommendation) handle transactional workloads with strong consistency requirements, while the analytical entity (AirQualityDailyStats) supports business intelligence queries through pre-aggregated views.
+
+The complete Entity-Relationship diagrams are maintained in DBML format in \texttt{docs/Diagram\_ER/Diagram\_ER.dbml} and include detailed annotations for constraints, data types, and design rationale.
+
+\begin{table}[H]
+\centering
+\small
+\caption{Entity Overview Organized by Component}
+\label{tab:entity_overview}
+\begin{tabular}{|l|l|l|l|}
+\hline
+\textbf{Component} & \textbf{Entity} & \textbf{Primary Purpose} & \textbf{Type} \\
+\hline
+\multirow{5}{*}{Geospatial \& Monitoring} & Station & Geographic station metadata & Operational \\
+ & AirQualityReading & Raw sensor measurements & Operational \\
+ & Pollutant & Pollutant definitions & Reference \\
+ & Provider & Data source API details & Reference \\
+ & MapRegion & Geographic boundaries & Reference \\
+\hline
+\multirow{4}{*}{Users \& Access Control} & AppUser & User accounts & Operational \\
+ & Role & User roles (Citizen, Researcher, Admin) & Reference \\
+ & Permission & Granular permissions & Reference \\
+ & RolePermission & Role-permission mapping & Reference \\
+\hline
+\multirow{3}{*}{Alerts \& Recommendations} & Alert & User-configured thresholds & Operational \\
+ & Recommendation & Generated health guidance & Operational \\
+ & ProductRecommendation & Product suggestions & Operational \\
+\hline
+\multirow{2}{*}{Reporting \& Analytics} & Report & Report metadata & Operational \\
+ & AirQualityDailyStats & Daily aggregated statistics & Analytical \\
+\hline
+\end{tabular}
+\end{table}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Information Flow and Data Transformations}
+\label{sec:arch_dataflow}
+
+The platform implements a structured data pipeline that transforms raw measurements from external providers into actionable insights for end users. This flow ensures data quality, supports both real-time and historical analysis, and maintains system performance within acceptable bounds.
+
+\subsection{End-to-End Pipeline}
+
+\begin{enumerate}
+    \item \textbf{Ingestion:} The Ingestion Job executes on a configurable schedule (typically every 10--60 minutes). It polls external APIs (AQICN, Google, IQAir), retrieves raw JSON payloads containing pollutant concentrations, timestamps, and station metadata.
+    
+    \item \textbf{Validation and Normalization:} Payloads pass to the Normalizer and Validator component, which:
+    \begin{itemize}
+        \item Validates schema (required fields present, data types correct).
+        \item Parses timestamps and converts to UTC.
+        \item Normalizes station identifiers using a provider-specific mapping table.
+        \item Harmonizes pollutant units to canonical forms (e.g., all concentrations to $\mu$g/m$^3$).
+        \item Deduplicates readings using the uniqueness constraint on (station\_id, pollutant\_id, datetime).
+        \item Logs validation errors and counts for observability.
+    \end{itemize}
+    
+    \item \textbf{Persistence:} Normalized readings insert into the PostgreSQL \texttt{AirQualityReading} table. Monthly partitioning automatically routes data to the appropriate partition based on timestamp, limiting partition size to approximately 2.5 million rows per month under current ingestion rates. Raw JSON payloads can optionally persist to MinIO for audit and replay (future enhancement).
+    
+    \item \textbf{Daily Aggregation:} The Daily Aggregation Job runs once per day (e.g., 02:00 UTC) to compute per-day, per-station, per-pollutant aggregates from the previous calendar day. Results populate \texttt{AirQualityDailyStats}, which accelerates dashboard and reporting queries.
+    
+    \item \textbf{API Reads:} Public REST API endpoints read from PostgreSQL, selecting either:
+    \begin{itemize}
+        \item Raw readings for recent, high-resolution data (e.g., last 7 days).
+        \item Daily aggregates for dashboards, historical trends, and report generation.
+    \end{itemize}
+    
+    \item \textbf{Frontend Presentation:} The web frontend consumes REST API responses to render:
+    \begin{itemize}
+        \item Real-time air quality indices and AQI bands for current conditions.
+        \item Time-series charts for historical trend analysis.
+        \item Threshold-based alerts and personalized health recommendations.
+        \item Custom report downloads (CSV/PDF) for researchers and analysts.
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Recommendation Engine Pipeline}
+
+A specialized pipeline handles alert and recommendation generation:
+
+\begin{enumerate}
+    \item \textbf{Detection:} When a new air quality reading arrives, the system classifies it into EPA AQI bands:
+    \begin{itemize}
+        \item Good (0--50), Moderate (51--100), Unhealthy for Sensitive Groups (101--150)
+        \item Unhealthy (151--200), Very Unhealthy (201--300), Hazardous (>300)
+    \end{itemize}
+    
+    \item \textbf{Matching:} The system matches detected AQI band against all active user alerts, identifying users whose configured thresholds have been exceeded.
+    
+    \item \textbf{Recommendation Generation:} For matched users, the system generates personalized health recommendations based on AQI band and user metadata (age group, health conditions if available). Recommendations include:
+    \begin{itemize}
+        \item Protective actions (e.g., "Wear N95 mask", "Limit outdoor activities").
+        \item Product suggestions (e.g., air filters, hand sanitizers, respiratory health supplements).
+        \item Activity guidance (e.g., "Cancel outdoor events", "Close windows and doors").
+    \end{itemize}
+    
+    \item \textbf{Delivery:} Recommendations and alerts deliver via configured channels (email, in-app notifications, SMS—future enhancement).
+\end{enumerate}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Technology Stack and Implementation}
+\label{sec:arch_technology}
+
+\subsection{Primary Data Store: PostgreSQL with TimescaleDB}
+
+PostgreSQL serves as the foundational relational database, extended with the TimescaleDB extension for optimized time-series handling. Key features include:
+
+\begin{itemize}
+    \item \textbf{Hypertables:} The \texttt{AirQualityReading} table is implemented as a monthly-partitioned TimescaleDB hypertable. Automatic partitioning routes data to month-specific chunks, enabling efficient pruning during time-localized queries (e.g., "fetch all readings for July 2024").
+    
+    \item \textbf{Compression:} TimescaleDB's compression features reduce storage footprint for historical chunks (>30 days old) by 5--10x, lowering backup and archival costs.
+    
+    \item \textbf{Continuous Aggregates:} Materialized views automatically refresh on a schedule (e.g., hourly for \texttt{AirQualityDailyStats}) without manual trigger invocation, simplifying operational management.
+    
+    \item \textbf{Temporal Partitioning Benefits:}
+    \begin{itemize}
+        \item Reduces index sizes and scan times for time-window queries.
+        \item Enables automated data retention policies (drop old partitions after 3 years).
+        \item Improves concurrent access by isolating table locks to specific partitions during maintenance.
+        \item Supports efficient incremental backups (archive only recent chunks, not entire tables).
+    \end{itemize}
+\end{itemize}
+
+\subsection{NoSQL Document Store}
+
+MongoDB or Azure Cosmos DB provides schema-less storage for user preferences and dashboard configurations. Benefits include:
+\begin{itemize}
+    \item Rapid schema evolution as feature requests arrive (new preference fields require no schema migration).
+    \item Embedded arrays and nested objects eliminate the need for relational joins during preference reads.
+    \item Index-driven queries optimize lookups by user\_id or configuration type.
+\end{itemize}
+
+\subsection{Object Storage (Optional Enhancement)}
+
+MinIO object storage provides distributed object store semantics for future enhancements:
+\begin{itemize}
+    \item Audit trails: Store raw JSON payloads from external APIs for replay and forensics.
+    \item Report exports: Archive generated PDF/CSV reports for long-term retention.
+    \item Data lake foundation: Enable future bulk analytics and machine-learning pipelines.
+\end{itemize}
+
+\subsection{Application Platform}
+
+\begin{itemize}
+    \item \textbf{Backend:} Python 3.12+ with FastAPI or Flask for REST API endpoints, APScheduler for batch job scheduling, SQLAlchemy for ORM, and structured logging via Python logging or ELK-compatible JSON.
+    
+    \item \textbf{Frontend:} Modern web framework (React, Vue.js, or Angular) with TypeScript, CSS frameworks (Tailwind, Bootstrap) for responsive design, and libraries for charts (Chart.js, Plotly) and maps (Leaflet, Mapbox).
+    
+    \item \textbf{DevOps:} Docker containers for application services (API, ingestion jobs), Docker Compose or Kubernetes for orchestration, PostgreSQL and NoSQL as managed services or containerized instances.
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Performance Optimization Strategies}
+\label{sec:arch_performance}
+
+The architecture employs multiple strategies to meet non-functional performance requirements (NFR1--NFR4: p95 latency <2 seconds for dashboard queries, <5 seconds for historical queries, under 1,000 concurrent users).
+
+\subsection{Indexing Strategy}
+
+\begin{itemize}
+    \item \textbf{Temporal Indexes:} B-tree indexes on \texttt{AirQualityReading.datetime} and partitioned station/pollutant columns for range scans.
+    
+    \item \textbf{Composite Indexes:} Multi-column indexes on (station\_id, pollutant\_id, datetime) for efficient filtering.
+    
+    \item \textbf{BRIN Indexes:} Block Range Indexes on datetime columns in large partitions reduce index size and improve cache locality compared to B-tree.
+    
+    \item \textbf{Foreign Key Indexes:} Indexes on foreign key columns (station\_id, pollutant\_id, provider\_id) accelerate joins during API queries.
+\end{itemize}
+
+\subsection{Query Acceleration}
+
+\begin{itemize}
+    \item \textbf{Materialized Views:} The \texttt{AirQualityDailyStats} table eliminates the need to scan millions of raw readings for dashboard visualizations.
+    
+    \item \textbf{Denormalization for Analytics:} Carefully selected denormalization (e.g., pre-aggregated daily stats) trades storage for query speed without sacrificing data quality.
+    
+    \item \textbf{Query Caching:} API layer caches frequent queries (current AQI by city) for 5--10 minutes, reducing database hits during peak traffic.
+\end{itemize}
+
+\subsection{Scalability Considerations}
+
+While the baseline is a single-node PostgreSQL deployment with optional read replicas, the architecture enables future scaling:
+
+\begin{itemize}
+    \item \textbf{Horizontal Read Scaling:} Asynchronous replication to standby instances allows read-only queries to distribute across multiple nodes, reducing load on the primary.
+    
+    \item \textbf{Sharding Strategy (Future):} If multi-city deployments emerge, data can shard by geographic region or city, with each shard a separate PostgreSQL instance or managed cloud service.
+    
+    \item \textbf{Archival Strategy:} Historical data older than 3 years migrates to cheaper, slower object storage (AWS Glacier, Azure Archive), keeping hot data on fast NVMe disks.
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Fault Tolerance and Data Reliability}
+\label{sec:arch_reliability}
+
+The architecture incorporates basic fault-tolerance mechanisms to prevent permanent data loss:
+
+\begin{itemize}
+    \item \textbf{Regular Backups:} Daily encrypted backups of PostgreSQL to cloud object storage or local secure storage.
+    
+    \item \textbf{Recovery Procedures:} Documented playbooks for recovering from single-node failures, database corruption, or accidental data deletion.
+    
+    \item \textbf{Replication:} Optional asynchronous streaming replication to a standby instance provides automatic failover capability in production deployments.
+    
+    \item \textbf{Data Validation:} The Normalizer component performs checksums on ingested payloads and logs validation errors, enabling detection of corrupted data before persistence.
+    
+    \item \textbf{Audit Trail:} Comprehensive logging of all API operations, ingestion activities, and administrative actions enables forensic analysis and compliance.
+\end{itemize}
+
+Note: Geographic redundancy across multiple regions, as mentioned in NFR7, is explicitly out of scope for the baseline course implementation and is documented as future work.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Summary of Chapter}
+\label{sec:arch_summary}
+
+This chapter described a layered, component-based architecture designed to ingest air quality data from heterogeneous sources, normalize and store it in a PostgreSQL relational schema, compute analytical aggregates, and expose results through REST APIs to web frontends and researcher tools. The data model organizes entities into four logical components (Geospatial \& Monitoring, Users \& Access Control, Alerts \& Recommendations, Reporting \& Analytics), with temporal partitioning and materialized views optimized for performance. The technology stack centers on PostgreSQL with TimescaleDB extensions for time-series efficiency, complemented by a NoSQL store for user preferences and MinIO for future audit/data-lake enhancements. The next chapter (Chapter~\ref{ch:method}) details the database design methodology, indexing strategies, ingestion procedures, and normalization processes that implement this architecture.

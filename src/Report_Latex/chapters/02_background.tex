@@ -1,0 +1,145 @@
+\chapter{Background}
+\label{ch:background}
+
+This chapter establishes the business and technical context for the air quality monitoring platform. It covers the importance of air quality monitoring as a public health challenge in urban environments, summarizes the key functional and non-functional requirements that guided system design, and reviews existing data platforms and related work to position this project's contributions within the broader landscape of environmental health informatics.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Business Context: Air Quality Monitoring in Bogotá}
+\label{sec:bg_business}
+
+Air pollution is one of the most significant environmental risk factors for global mortality. The World Health Organization estimates that ambient and household air pollution jointly cause 7--8 million premature deaths annually, with 99\% of the world's population exposed to air exceeding WHO guideline values~\citep{whopollution}. The 2024 State of Global Air report identifies fine particulate matter (PM$_{2.5}$) as the second leading risk factor for mortality worldwide, surpassing tobacco smoking and high blood pressure~\citep{state}.
+
+\subsection{Air Quality Challenge in Bogotá}
+\label{subsec:bg_bogota}
+
+Bogotá, Colombia's capital and home to over 8 million residents, faces particularly acute air quality challenges. Latin American megacities struggle with rapid urbanization, heavy vehicular emissions, industrial activities, and geographic conditions that trap pollutants. In Bogotá, long-term studies document persistent spatially heterogeneous PM$_{2.5}$ concentrations, particularly in industrial zones and high-traffic corridors.
+
+While the city has achieved incremental improvements—declining from 15.7~$\mu$g/m$^3$ in 2017 to 13.1~$\mu$g/m$^3$ in 2019 through the Air Plan 2030 initiative—current levels still exceed WHO recommended annual exposure limits of 5~$\mu$g/m$^3$. Vulnerable populations—children, elderly individuals, and people with respiratory or cardiovascular conditions—face disproportionate health risks from chronic exposure.
+
+\subsection{Market Opportunity and Stakeholder Needs}
+\label{subsec:bg_opportunity}
+
+Multiple air quality data sources exist (AQICN, Google Air Quality API, IQAir), yet citizens and policymakers lack integrated, timely, and personalized access to this information. Existing platforms present barriers:
+
+\begin{itemize}
+    \item \textbf{Fragmentation:} Data platforms operate independently with inconsistent formats, units, and update frequencies, requiring users to navigate multiple interfaces.
+    
+    \item \textbf{Lack of Personalization:} Platforms provide aggregate indices without translating air quality data into health guidance tailored to individual conditions, age groups, or planned activities.
+    
+    \item \textbf{Technical Barriers:} Citizens without environmental science expertise struggle to interpret pollutant abbreviations and AQI scales, particularly affecting vulnerable populations most needing clear guidance.
+    
+    \item \textbf{Operational Constraints:} Proprietary platforms enforce strict API quotas and tiered pricing, complicating continuous city-scale monitoring by researchers and municipalities.
+    
+    \item \textbf{Real-Time Gaps:} Many platforms aggregate data hourly or longer, missing rapid pollution events warranting immediate health warnings.
+\end{itemize}
+
+This project addresses these gaps by designing a unified platform integrating heterogeneous data sources, normalizing measurements into a consistent schema, and delivering personalized, evidence-based health recommendations to citizens. The platform serves multiple stakeholder groups: citizens seeking health guidance, researchers conducting longitudinal analysis, policy makers monitoring urban conditions, and technical administrators managing data operations.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Functional and Non-Functional Requirements}
+\label{sec:bg_requirements}
+
+To address the identified gaps, this project defines a comprehensive set of functional and non-functional requirements refined iteratively through three project workshops, aligned with the Delivery 3 baseline scope. For complete details on all 14 functional requirements and 17 non-functional requirements, see Appendix~\ref{ch:app_requirements}.
+
+\subsection{Core Functional Requirements}
+
+The ten critical baseline functional requirements are:
+
+\begin{itemize}
+    \item \textbf{FR1 -- Periodic Data Collection:} Automated ingestion from AQICN, Google Air Quality API, and IQAir at 10--60 minute intervals, with normalization, validation, and failure logging.
+    
+    \item \textbf{FR2 -- Historical Data Access:} Query and visualization of historical data (minimum 3 years) filtered by date range, location, and pollutant, with export to CSV/JSON.
+    
+    \item \textbf{FR3 -- Unified Data Presentation:} Display air quality information in consistent format independent of source API.
+    
+    \item \textbf{FR4 -- KPI Dashboards:} Real-time dashboards displaying current AQI, main pollutant, and trend charts updated at ingestion intervals.
+    
+    \item \textbf{FR5 -- Custom Report Generation:} User-configurable reports with date, location, and pollutant filters, downloadable in standard formats.
+    
+    \item \textbf{FR6 -- Interactive Visualization:} Time-series graphs with user controls for date range and pollutant selection.
+    
+    \item \textbf{FR8 -- Rule-Based Recommendations:} Deterministic health guidance based on AQI thresholds aligned with EPA and WHO guidelines.
+    
+    \item \textbf{FR9 -- Configurable Alerts:} User-defined alerts triggering when AQI exceeds thresholds, delivered via email or in-app.
+    
+    \item \textbf{FR12 -- Geographic Search:} Search air quality data by country, city, or region.
+    
+    \item \textbf{FR13 -- Responsive Web Interface:} Mobile, tablet, and desktop compatibility with WCAG 2.1 Level AA accessibility.
+\end{itemize}
+
+\subsection{Core Non-Functional Requirements}
+
+The ten critical baseline non-functional targets are:
+
+\begin{itemize}
+    \item \textbf{NFR1/NFR2 -- Query Latency:} Dashboard queries < 2 seconds; historical queries over months < 5 seconds.
+    
+    \item \textbf{NFR3 -- Ingestion Throughput:} Process and persist $\geq$ 1,000 readings per 10-minute cycle.
+    
+    \item \textbf{NFR5 -- System Uptime:} Target 99.5\% uptime with graceful degradation if external APIs fail.
+    
+    \item \textbf{NFR6 -- Data Integrity:} Maintain referential integrity; detect and deduplicate duplicate readings.
+    
+    \item \textbf{NFR8 -- Audit Trail:} Log all ingestion activities with source, timestamp, and result status.
+    
+    \item \textbf{NFR9 -- Concurrent Users:} Support up to 1,000 concurrent web users without latency degradation.
+    
+    \item \textbf{NFR10 -- Data Volume:} Design database to scale to 10+ million readings across years and stations.
+    
+    \item \textbf{NFR12 -- Responsive Design:} Interface responsive on all viewport sizes; WCAG 2.1 Level AA compliant.
+    
+    \item \textbf{NFR16 -- Data Retention:} Retain historical air quality data 3+ years for research and longitudinal analysis.
+\end{itemize}
+
+Appendix~\ref{ch:app_requirements} provides the complete traceability matrix mapping requirements to 14 user stories and system components.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Related Work: Existing Air Quality Platforms}
+\label{sec:bg_related_work}
+
+Multiple platforms provide air quality data to the public, each with distinct capabilities and limitations that informed this project's design decisions.
+
+\subsection{AQICN (Air Quality Index China Network)}
+\label{subsec:bg_aqicn}
+
+AQICN offers one of the most comprehensive global databases, providing minute-level AQI readings and historical archives for over 100 countries~\citep{aqicn}. The platform aggregates data from government stations, low-cost sensor networks, and satellite observations, with historical CSV data available since 2015.
+
+However, AQICN presents raw values without health context or personalization. Users must independently interpret AQI and implications for their conditions. The platform's strength lies in comprehensive spatial-temporal coverage rather than user-oriented decision support.
+
+\subsection{Google Air Quality API}
+\label{subsec:bg_google}
+
+Google's Air Quality API provides high-resolution (500-meter grid) indices with pollutant concentrations and basic health recommendations~\citep{google}. The API returns structured JSON with current conditions, hourly forecasts, and activity-specific health tips.
+
+While offering superior spatial granularity and accessible health messaging, Google's service enforces strict quota limits complicating city-scale analytics. Free-tier usage allows limited daily requests; high-volume access requires enterprise agreements. The service focuses on current and short-term forecasts, with limited long-term historical analysis support.
+
+\subsection{IQAir AirVisual}
+\label{subsec:bg_iqair}
+
+IQAir operates a calibrated sensor network providing data through both consumer and REST API~\citep{iqairapi}. The platform emphasizes sensor accuracy and calibration, offering superior reliability to many low-cost networks, with hourly updates for major metropolitan areas.
+
+IQAir's tiered pricing model presents barriers for research projects and non-commercial applications requiring comprehensive historical data. Hourly aggregation may miss rapid pollution events requiring finer temporal granularity.
+
+\subsection{Academic and Related Research}
+
+Environmental health informatics research explores machine learning for pollution forecasting and health impact prediction~\citep{esr}. While promising, operational deployment requires reliable data infrastructure and citizen-facing applications—the focus of this project. Low-cost sensor networks expand coverage beyond government stations but introduce data quality challenges requiring calibration protocols~\citep{wiley}. Smart city initiatives increasingly incorporate air quality monitoring, though most focus on municipal planning visualization rather than personalized citizen guidance~\citep{mdpi}.
+
+\subsection{Gap Analysis and Project Contribution}
+
+Existing platforms successfully aggregate air quality data but lack integration, personalization, and explainable recommendations. This project bridges the gap by:
+
+\begin{enumerate}
+    \item Integrating heterogeneous sources into a unified relational schema with normalization and deduplication.
+    \item Providing personalized, rule-based recommendations aligned with EPA and WHO guidelines, ensuring transparency.
+    \item Delivering a scalable architecture suitable for city-scale deployment and multi-city expansion.
+    \item Enabling fast analytical queries (< 2--5 seconds) through indexed, partitioned schemas and materialized views.
+    \item Creating clear separation of concerns (data, API, presentation) enabling independent scaling.
+\end{enumerate}
+
+The design balances operational simplicity with capability, avoiding unnecessary complexity while maintaining clear upgrade paths to advanced features (stream processing, machine learning, multi-region deployment) documented as future work.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Summary of Chapter}
+\label{sec:bg_summary}
+
+This chapter established the business case for integrating air quality data from multiple sources into a unified platform delivering personalized recommendations to Bogotá's citizens. The key functional and non-functional requirements were summarized, with complete details in Appendix~\ref{ch:app_requirements}. A review of existing platforms and related research highlighted gaps that this project addresses: lack of integration, personalization, and explainable recommendations. The following chapters describe the system and database architecture (Chapter~3) and the design methodology (Chapter~4) that implement these requirements.

@@ -1,7 +1,384 @@
-\chapter{Additional Resources}
-\label{appn:B}
+\chapter{Complete User Stories and Acceptance Criteria}
+\label{ch:app_userstories}
 
-% This appendix can include additional resources such as:
-% - Performance measurement tables
-% - Test configurations
-% - Deployment procedures
+This appendix provides the complete set of 14 user stories that drove the system design, including acceptance criteria and associated functional requirements. For readability, only the most critical user stories are highlighted in the main report (Chapter~2); full details are provided here.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{User Story Format}
+\label{sec:app_us_format}
+
+Each user story follows the standard format:
+
+\noindent
+\textbf{User Story ID:} Unique identifier (US1, US2, etc.)
+
+\textbf{Role:} The persona or actor using the system (Citizen, Researcher, Technical Administrator, Policy Manager)
+
+\textbf{Narrative:} ``As a [Role], I want to [action], so that [benefit].''
+
+\textbf{Priority:} Must (critical baseline), Should (important enhancement), or Could (nice-to-have)
+
+\textbf{Effort:} Story points (rough sizing: 3=small, 5=medium, 8=large)
+
+\textbf{Acceptance Criteria:} Measurable, testable conditions confirming completion
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Complete User Stories}
+\label{sec:app_us_complete}
+
+%%%
+\subsection*{US1 -- Automated Data Ingestion}
+\addcontentsline{toc}{subsection}{US1 -- Automated Data Ingestion}
+
+\textbf{Role:} Technical Administrator
+
+\textbf{Narrative:} As a technical administrator, I want to collect up-to-date air quality data from external providers in an automated way, so that the platform can provide accurate and current information without manual imports.
+
+\textbf{Associated FR:} FR1, FR3
+
+\textbf{Priority:} \textbf{Must} \quad \textbf{Effort:} 8 points
+
+\textbf{Acceptance Criteria:}
+\begin{enumerate}
+    \item Ingestion job runs on a configurable schedule (e.g., every 10--60 minutes).
+    \item At least one external provider (AQICN, Google, IQAir) is ingested without manual intervention.
+    \item Failed ingestions are logged with error details and timestamps.
+    \item Successful runs are logged with row counts and timing information.
+    \item Ingested readings appear in the database within the expected delay (e.g., 10 minutes after external API update).
+    \item Duplicate readings (same station, pollutant, datetime) are detected and handled (deduplicated or rejected) without data loss.
+\end{enumerate}
+
+%%%
+\subsection*{US2 -- Historical Data Access for Research}
+\addcontentsline{toc}{subsection}{US2 -- Historical Data Access for Research}
+
+\textbf{Role:} Researcher / Analyst
+
+\textbf{Narrative:} As a researcher or analyst, I want to access historical air quality data filtered by city, date range, and pollutant, so that I can perform longitudinal analysis and scientific research.
+
+\textbf{Associated FR:} FR2, FR7
+
+\textbf{Priority:} \textbf{Must} \quad \textbf{Effort:} 5 points
+
+\textbf{Acceptance Criteria:}
+\begin{enumerate}
+    \item User can select city, date range, and pollutant from the interface (via REST API or web UI).
+    \item System returns matching records from historical data, paginated if result set is large.
+    \item Results can be exported to CSV and JSON formats with all selected columns.
+    \item At least 3 years of historical data are available for test cities.
+    \item Query completion time is under 5 seconds for typical date ranges (e.g., 6 months).
+    \item Results include station name, pollutant, datetime, and measured value.
+\end{enumerate}
+
+%%%
+\subsection*{US3 -- Fast Queries for Dashboard Support}
+\addcontentsline{toc}{subsection}{US3 -- Fast Queries for Dashboard Support}
+
+\textbf{Role:} Technical Administrator
+
+\textbf{Narrative:} As a technical administrator, I want to run queries over large volumes of air quality data without significant delays, so that I can support analysts and dashboards without performance bottlenecks.
+
+\textbf{Associated FR:} FR4
+
+\textbf{Priority:} \textbf{Should} \quad \textbf{Effort:} 5 points
+
+\textbf{Acceptance Criteria:}
+\begin{enumerate}
+    \item Typical dashboard queries (recent AQI, daily trends for a single station) complete in under 2 seconds for test datasets (85,000+ readings).
+    \item Historical queries over several months (e.g., 180 days) complete in under 5 seconds.
+    \item Database indexes for common filters (station\_id, datetime, pollutant\_id) are documented and enabled.
+    \item Query plans (via EXPLAIN/ANALYZE) show efficient use of indexes without full table scans.
+    \item Performance remains acceptable as data volume grows to 1M+ records.
+\end{enumerate}
+
+%%%
+\subsection*{US4 -- Key Performance Indicator Dashboards}
+\addcontentsline{toc}{subsection}{US4 -- Key Performance Indicator Dashboards}
+
+\textbf{Role:} Public Policy Manager
+
+\textbf{Narrative:} As a public policy manager, I want to view dashboards with key air quality indicators for selected regions, so that I can quickly understand current conditions and recent trends to inform decisions.
+
+\textbf{Associated FR:} FR4
+
+\textbf{Priority:} \textbf{Must} \quad \textbf{Effort:} 8 points
+
+\textbf{Acceptance Criteria:}
+\begin{enumerate}
+    \item Dashboard displays at minimum: current AQI, main pollutant (highest concentration), and daily trend (chart of last 7 or 30 days).
+    \item Dashboard updates when user changes city or station.
+    \item Dashboard uses pre-computed AirQualityDailyStats table for historical trends and raw readings table for current values.
+    \item Page load time is under 2 seconds.
+    \item Dashboard is responsive and usable on mobile, tablet, and desktop.
+    \item Data freshness is at most 10 minutes (aligned with ingestion interval).
+\end{enumerate}
+
+%%%
+\subsection*{US5 -- Custom Report Generation and Download}
+\addcontentsline{toc}{subsection}{US5 -- Custom Report Generation and Download}
+
+\textbf{Role:} Researcher / Analyst
+
+\textbf{Narrative:} As a researcher or analyst, I want to generate custom reports with filters and download them, so that I can use the data in external tools or include it in my own analyses.
+
+\textbf{Associated FR:} FR5
+
+\textbf{Priority:} \textbf{Must} \quad \textbf{Effort:} 5 points
+
+\textbf{Acceptance Criteria:}
+\begin{enumerate}
+    \item User can configure a report by choosing city/region, date range, and pollutants of interest.
+    \item User selects desired columns/metrics (raw readings, daily averages, min/max, AQI).
+    \item System generates the report and indicates when it is ready for download.
+    \item User can download the report in at least CSV format (JSON is a bonus).
+    \item Report generation completes within 30 seconds for typical requests.
+    \item Downloaded file includes headers and is formatted for easy import into analysis tools.
+\end{enumerate}
+
+%%%
+\subsection*{US6 -- Time-Series Visualization}
+\addcontentsline{toc}{subsection}{US6 -- Time-Series Visualization}
+
+\textbf{Role:} Citizen
+
+\textbf{Narrative:} As a citizen, I want to see simple graphs of how air quality changes over time in my city, so that I can understand whether conditions are improving or getting worse.
+
+\textbf{Associated FR:} FR6
+
+\textbf{Priority:} \textbf{Must} \quad \textbf{Effort:} 3 points
+
+\textbf{Acceptance Criteria:}
+\begin{enumerate}
+    \item User can select a city and a pollutant from the interface.
+    \item System displays a time-series chart (line graph) for the selected period (default: last 30 days).
+    \item User can change the date range (e.g., last 7 days vs last 90 days) and the chart updates accordingly.
+    \item Chart includes labeled axes (date on x-axis, pollutant concentration on y-axis) and a legend.
+    \item Chart loads and renders within 2 seconds.
+    \item User can toggle between different pollutants without reloading the page.
+\end{enumerate}
+
+%%%
+\subsection*{US7 -- Rule-Based Health Recommendations}
+\addcontentsline{toc}{subsection}{US7 -- Rule-Based Health Recommendations}
+
+\textbf{Role:} Citizen
+
+\textbf{Narrative:} As a citizen, I want to receive simple recommendations based on current air quality at my location, so that I can protect my health when air quality is poor.
+
+\textbf{Associated FR:} FR8
+
+\textbf{Priority:} \textbf{Should} \quad \textbf{Effort:} 5 points
+
+\textbf{Acceptance Criteria:}
+\begin{enumerate}
+    \item User can set a default city or location in their profile (or provide location implicitly).
+    \item When AQI exceeds defined thresholds (e.g., AQI > 100), the system displays recommendations such as:
+    \begin{itemize}
+        \item AQI 0--50 (Good): ``Air quality is safe. Enjoy outdoor activities.''
+        \item AQI 51--100 (Moderate): ``Unusually sensitive people should consider limiting outdoor exposure.''
+        \item AQI 101--150 (Unhealthy for Sensitive): ``Sensitive groups should avoid prolonged outdoor exercise.''
+        \item AQI 151+: ``Everyone should reduce outdoor exposure and wear N95 masks if necessary.''
+    \end{itemize}
+    \item Recommendations are based on simple, documented rules (no complex machine learning required).
+    \item Recommendations update whenever the user views the dashboard or a recommendation endpoint is called.
+    \item Rules and thresholds are easily configurable for future adjustments.
+\end{enumerate}
+
+%%%
+\subsection*{US8 -- Configurable Alert System}
+\addcontentsline{toc}{subsection}{US8 -- Configurable Alert System}
+
+\textbf{Role:} Citizen
+
+\textbf{Narrative:} As a citizen, I want to configure alerts when air quality exceeds a certain threshold, so that I can be notified when conditions become unhealthy.
+
+\textbf{Associated FR:} FR9
+
+\textbf{Priority:} \textbf{Must} \quad \textbf{Effort:} 5 points
+
+\textbf{Acceptance Criteria:}
+\begin{enumerate}
+    \item User can create an alert by selecting city/station, pollutant, and AQI threshold.
+    \item User can choose at least one notification channel (e.g., email, in-app notification).
+    \item When AQI exceeds the configured threshold, an alert is recorded in the database and shown to the user.
+    \item User receives a notification (email or in-app message) with details: location, pollutant, current AQI.
+    \item User can view active alerts and deactivate or delete alerts from their profile.
+    \item User can edit alert thresholds without creating a new alert.
+    \item System prevents duplicate alerts for the same condition within a short time window (e.g., 1 hour).
+\end{enumerate}
+
+%%%
+\subsection*{US9 -- Informational Protective Measures}
+\addcontentsline{toc}{subsection}{US9 -- Informational Protective Measures}
+
+\textbf{Role:} Citizen
+
+\textbf{Narrative:} As a citizen, I want to see informational suggestions about protective measures during high pollution episodes, so that I can decide whether to use masks, air purifiers, or other measures.
+
+\textbf{Associated FR:} FR10
+
+\textbf{Priority:} \textbf{Could} \quad \textbf{Effort:} 3 points
+
+\textbf{Acceptance Criteria:}
+\begin{enumerate}
+    \item When AQI is above a defined level (e.g., AQI > 100), the interface shows text with recommended protective measures.
+    \item Suggestions include: ``Consider wearing an N95 mask if spending time outdoors,'' ``Use an air purifier indoors,'' ``Limit outdoor time.''
+    \item Suggestions are informational only and do not include e-commerce links or product sales.
+    \item Text is clear and uses simple language understandable by non-technical users.
+    \item Suggestions update whenever air quality data is refreshed.
+\end{enumerate}
+
+%%%
+\subsection*{US10 -- Geographic Search}
+\addcontentsline{toc}{subsection}{US10 -- Geographic Search}
+
+\textbf{Role:} Citizen
+
+\textbf{Narrative:} As a citizen, I want to search air quality by country, city, or region, so that I can compare air quality in different places.
+
+\textbf{Associated FR:} FR12
+
+\textbf{Priority:} \textbf{Must} \quad \textbf{Effort:} 3 points
+
+\textbf{Acceptance Criteria:}
+\begin{enumerate}
+    \item User can search by country name and see a list of available cities or regions.
+    \item User can search directly by city name (auto-complete or search box).
+    \item User can open a dashboard for any selected city/station.
+    \item If regions are defined (e.g., neighborhoods in Bogotá), user can filter stations by region.
+    \item Search results are returned quickly (within 1 second).
+    \item Search is case-insensitive and handles partial matches.
+\end{enumerate}
+
+%%%
+\subsection*{US11 -- Responsive Web Interface}
+\addcontentsline{toc}{subsection}{US11 -- Responsive Web Interface}
+
+\textbf{Role:} Citizen
+
+\textbf{Narrative:} As a citizen, I want to access the platform from different devices (mobile, tablet, desktop), so that I can check air quality whenever I need it, from any device.
+
+\textbf{Associated FR:} FR13
+
+\textbf{Priority:} \textbf{Must} \quad \textbf{Effort:} 5 points
+
+\textbf{Acceptance Criteria:}
+\begin{enumerate}
+    \item Core views (home page, dashboard, alerts, search) are usable on mobile, tablet, and desktop browsers.
+    \item Layout adapts without breaking text, images, or controls.
+    \item Navigation is accessible on touch devices (buttons and links are appropriately sized).
+    \item No horizontal scrolling is required on mobile devices.
+    \item Page load time is acceptable on all device types (under 3 seconds on 4G).
+    \item No native mobile app is required; the responsive web app is sufficient.
+    \item Interface follows WCAG 2.1 Level AA accessibility guidelines.
+\end{enumerate}
+
+%%%
+\subsection*{US12 -- Social Media Sharing}
+\addcontentsline{toc}{subsection}{US12 -- Social Media Sharing}
+
+\textbf{Role:} Citizen
+
+\textbf{Narrative:} As a citizen, I want to share air quality views with other people through social media or messaging, so that I can raise awareness about air quality conditions.
+
+\textbf{Associated FR:} FR14
+
+\textbf{Priority:} \textbf{Could} \quad \textbf{Effort:} 3 points
+
+\textbf{Acceptance Criteria:}
+\begin{enumerate}
+    \item User can obtain a shareable link to the current dashboard view or report.
+    \item Link encodes selected filters (city, date range, pollutants) in the URL.
+    \item Link opens the same view for other users without requiring them to reapply filters.
+    \item User can share link via copy-to-clipboard or direct integration with social media platforms.
+    \item Shared links remain valid for an extended period (e.g., 1 year).
+    \item URL is human-readable or uses a URL shortener for convenience.
+\end{enumerate}
+
+%%%
+\subsection*{US13 -- Performance and Fast Loading}
+\addcontentsline{toc}{subsection}{US13 -- Performance and Fast Loading}
+
+\textbf{Role:} Citizen
+
+\textbf{Narrative:} As a citizen, I want to experience fast loading times when using the platform, so that I do not abandon the platform due to slow responses.
+
+\textbf{Associated FR:} FR4, NFR1
+
+\textbf{Priority:} \textbf{Must} \quad \textbf{Effort:} 5 points
+
+\textbf{Acceptance Criteria:}
+\begin{enumerate}
+    \item Main dashboards load in under 2 seconds for typical users under normal load.
+    \item Historical data queries complete within 5 seconds.
+    \item API responses are delivered within 1 second for paginated queries.
+    \item Pagination or lazy loading is used where necessary to avoid rendering very large lists at once.
+    \item Performance testing (e.g., JMeter) confirms latency targets under simulated load (100+ concurrent users).
+    \item Performance metrics are monitored and logged for operational visibility.
+\end{enumerate}
+
+%%%
+\subsection*{US14 -- Ingestion Monitoring and Alerting}
+\addcontentsline{toc}{subsection}{US14 -- Ingestion Monitoring and Alerting}
+
+\textbf{Role:} Technical Administrator
+
+\textbf{Narrative:} As a technical administrator, I want to monitor ingestion jobs and detect failures, so that I can quickly react if external providers change or if ingestion stops.
+
+\textbf{Associated FR:} FR1, NFR7
+
+\textbf{Priority:} \textbf{Should} \quad \textbf{Effort:} 5 points
+
+\textbf{Acceptance Criteria:}
+\begin{enumerate}
+    \item There is a view (admin dashboard or log interface) where the status of recent ingestion jobs is visible.
+    \item For each job, the system stores: timestamp, data source (AQICN, Google, IQAir), result status (success or failure), row count.
+    \item Failure entries include a brief error message or error code to guide debugging.
+    \item Admin can filter ingestion logs by date range, data source, and result status.
+    \item If ingestion fails multiple times in succession, an alert is raised (configurable threshold).
+    \item Logs are retained for at least 3 months for historical analysis.
+\end{enumerate}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Priority and Effort Summary}
+\label{sec:app_us_summary}
+
+The following table summarizes effort and priority across all user stories:
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{|c|c|c|c|}
+\hline
+\textbf{Priority} & \textbf{Count} & \textbf{Total Effort (points)} & \textbf{Representative User Stories} \\
+\hline
+Must & 9 & 39 & US1, US2, US4, US5, US6, US8, US10, US11, US13 \\
+\hline
+Should & 3 & 15 & US3, US7, US14 \\
+\hline
+Could & 2 & 6 & US9, US12 \\
+\hline
+\textbf{Total} & \textbf{14} & \textbf{60} & \\
+\hline
+\end{tabular}
+\caption{User Story Priority and Effort Summary}
+\label{tab:us_summary}
+\end{table}
+
+\section{Alignment with Functional Requirements}
+\label{sec:app_us_fr_alignment}
+
+Each user story is mapped to one or more functional requirements to ensure traceability:
+
+\begin{itemize}
+    \item \textbf{Ingestion and Data Integrity:} US1 → FR1, FR3 (data collection and unified presentation)
+    \item \textbf{Data Access:} US2, US5, US6 → FR2, FR5, FR6, FR7 (querying, visualization, export)
+    \item \textbf{Dashboards and Analytics:} US4, US3 → FR4 (KPI dashboards); US13 → NFR1, NFR2 (performance)
+    \item \textbf{Recommendations and Alerts:} US7, US8 → FR8, FR9 (rule-based recommendations, configurable alerts)
+    \item \textbf{Information and Awareness:} US9 → FR10 (protective measures); US12 → FR14 (shareable links)
+    \item \textbf{Geographic Access:} US10 → FR12 (geographic search)
+    \item \textbf{Device Compatibility:} US11 → FR13 (responsive design)
+    \item \textbf{Operations:} US14 → NFR7, NFR8 (ingestion reliability and audit trail)
+\end{itemize}
+
+This mapping ensures that all functional requirements are addressed by one or more user stories, and that each user story is grounded in business value.

@@ -2,119 +2,142 @@
 
 Table Station {
   id int [pk]
-  name varchar
-  latitude float
-  longitude float
-  city varchar
-  country varchar
+  name varchar [not null]
+  latitude float [not null]
+  longitude float [not null]
+  city varchar [not null]
+  country varchar [not null]
   region_id int [ref: > MapRegion.id]
+  provider_id int [ref: > Provider.id]
+  created_at timestamp
+}
+
+Table Provider {
+  id int [pk]
+  name varchar [unique, not null]
+  api_endpoint varchar
+  api_key varchar [note: "Encrypted in production"]
+  ingestion_frequency_minutes int
+  created_at timestamp
 }
 
 Table AirQualityReading {
   id int [pk]
-  station_id int [ref: > Station.id]
-  pollutant_id int [ref: > Pollutant.id]
-  datetime timestamp
-  value float
+  station_id int [ref: > Station.id, not null]
+  pollutant_id int [ref: > Pollutant.id, not null]
+  provider_id int [ref: > Provider.id]
+  datetime timestamp [not null]
+  value float [not null, note: "Normalized to canonical units"]
   aqi int
+  raw_json jsonb [note: "Raw payload for audit trail"]
+  created_at timestamp
 }
 
 Table Pollutant {
   id int [pk]
-  name varchar
-  unit varchar
+  name varchar [unique, not null]
+  unit varchar [note: "e.g., μg/m³ or ppb"]
   description text
 }
 
 Table MapRegion {
   id int [pk]
-  name varchar
-  geom geometry // optional: for advanced geospatial visualizations (PostGIS)
+  name varchar [unique, not null]
+  description text
+  geom geometry [note: "PostGIS geometry for advanced visualizations (optional)"]
 }
 
 //// USERS & ACCESS CONTROL (Operational)
 
 Table AppUser {
   id int [pk]
-  name varchar
-  email varchar
-  password_hash varchar
+  username varchar [unique, not null]
+  email varchar [unique, not null]
+  password_hash varchar [not null]
+  full_name varchar
   location varchar
-  role_id int [ref: > Role.id]
+  role_id int [ref: > Role.id, not null]
+  is_active boolean [default: true]
+  created_at timestamp
+  updated_at timestamp
 }
 
 Table Role {
   id int [pk]
-  name varchar [unique]
+  name varchar [unique, not null, note: "e.g., Citizen, Researcher, Administrator"]
+  description text
+  created_at timestamp
 }
 
 Table Permission {
   id int [pk]
-  name varchar [unique]
+  name varchar [unique, not null, note: "e.g., view_current_aqi, download_data, configure_alerts"]
+  description text
 }
 
 Table RolePermission {
-  role_id int [ref: > Role.id]
-  permission_id int [ref: > Permission.id]
+  role_id int [ref: > Role.id, not null]
+  permission_id int [ref: > Permission.id, not null]
   primary key (role_id, permission_id)
 }
 
-//// ALERTS & PERSONALIZATION (Operational)
+//// ALERTS & RECOMMENDATIONS (Operational)
 
 Table Alert {
   id int [pk]
-  user_id int [ref: > AppUser.id]
-  pollutant_id int [ref: > Pollutant.id]
-  threshold float
-  method varchar        // e.g. 'email', 'sms'
-  triggered_at timestamp
+  user_id int [ref: > AppUser.id, not null]
+  station_id int [ref: > Station.id, not null]
+  pollutant_id int [ref: > Pollutant.id, not null]
+  threshold float [not null, note: "AQI or concentration threshold"]
+  trigger_condition varchar [note: "e.g., 'exceeds', 'falls_below'"]
+  notification_method varchar [note: "e.g., 'email', 'in-app'"]
+  is_active boolean [default: true]
+  triggered_at timestamp [note: "Last trigger time"]
+  created_at timestamp
 }
 
-// Generic recommendation to the user based on pollution level,
-// e.g. "use a basic mask" or "avoid outdoor exercise".
 Table Recommendation {
   id int [pk]
-  user_id int [ref: > AppUser.id]
-  location varchar       // city or area name
-  pollution_level int    // e.g. AQI value used to choose the advice
-  message text           // human-readable recommendation
+  user_id int [ref: > AppUser.id, not null]
+  station_id int [ref: > Station.id, not null]
+  aqi_band int [note: "EPA AQI band: 0=Good, 1=Moderate, 2=USG, 3=Unhealthy, 4=VeryUnhealthy, 5=Hazardous"]
+  message text [not null, note: "e.g., 'Wear N95 mask, limit outdoor activities'"]
   created_at timestamp
 }
 
-// Simple mapping from a recommendation to a suggested protection product,
-// for example: normal mask vs specialized mask.
 Table ProductRecommendation {
   id int [pk]
-  recommendation_id int [ref: > Recommendation.id]
-  product_name varchar       // e.g. 'Basic Face Mask'
-  product_type varchar       // e.g. 'mask', 'respirator'
-  product_url varchar        // optional: informational link
+  recommendation_id int [ref: > Recommendation.id, not null]
+  product_name varchar [not null, note: "e.g., 'N95 Face Mask', 'Air Purifier'"]
+  product_category varchar [note: "e.g., 'respiratory_protection', 'air_quality_device'"]
+  product_url varchar [note: "Informational or purchase link (optional)"]
 }
 
-//// REPORTING & ANALYTICS
+//// REPORTING & ANALYTICS (Operational and Analytical)
 
-// Operational report metadata (no JSON).
 Table Report {
   id int [pk]
-  user_id int [ref: > AppUser.id]
-  created_at timestamp
-  city varchar
-  start_date date
-  end_date date
+  user_id int [ref: > AppUser.id, not null]
   station_id int [ref: > Station.id]
   pollutant_id int [ref: > Pollutant.id]
-  file_path varchar
+  title varchar [not null]
+  start_date date [not null]
+  end_date date [not null]
+  file_format varchar [note: "e.g., 'CSV', 'PDF'"]
+  file_path varchar [note: "Path or S3 URL"]
+  created_at timestamp
+  generated_at timestamp
 }
 
-// Analytical aggregated data for BI (analytical domain).
 Table AirQualityDailyStats {
   id int [pk]
-  station_id int [ref: > Station.id]
-  pollutant_id int [ref: > Pollutant.id]
-  date date
+  station_id int [ref: > Station.id, not null]
+  pollutant_id int [ref: > Pollutant.id, not null]
+  date date [not null]
   avg_value float
   avg_aqi int
   max_aqi int
   min_aqi int
   readings_count int
+  created_at timestamp
 }

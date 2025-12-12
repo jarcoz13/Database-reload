@@ -1,9 +1,172 @@
-\chapter{Supplementary Material}
-\label{appn:A}
+\chapter{Complete Functional and Non-Functional Requirements}
+\label{ch:app_requirements}
 
-% This appendix can include supplementary material such as:
-% - API endpoint schemas
-% - Database DDL statements
-% - Configuration files
-% - Raw data samples
+This appendix provides the complete set of functional requirements (FR) and non-functional requirements (NFR) that guided the design and implementation of the air quality monitoring platform. For brevity, only the most critical requirements are summarized in the main body of the report (Chapter~2); full details are provided here for reference and future development.
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Functional Requirements (FR)}
+\label{sec:app_fr}
+
+Fourteen functional requirements were defined and refined through iterative workshops. The table below summarizes each requirement, its status (Baseline, Optional, or Future Work), and key implementation notes.
+
+\subsection{FR Summary Table}
+\label{subsec:app_fr_table}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{|p{0.8cm}|p{5cm}|p{2cm}|p{3.5cm}|}
+\hline
+\textbf{ID} & \textbf{Requirement} & \textbf{Status} & \textbf{Associated User Stories} \\
+\hline
+FR1 & The system must periodically collect up-to-date air quality data from multiple external sources (APIs, monitoring stations) and store it for processing. & Baseline & US1, US13, US14 \\
+\hline
+FR2 & The system must allow users to query and visualize historical air quality data filtered by date range, location, and pollutant type. & Baseline & US2, US7 \\
+\hline
+FR3 & The system must display air quality information in a consistent and clear format, independently of the original data source. & Baseline & US1, US3 \\
+\hline
+FR4 & The system must display dashboards with key air quality indicators (AQI, main pollutant, daily trends) based on the latest available data. & Baseline & US4 \\
+\hline
+FR5 & The system must generate custom reports with filters, allowing users to download in CSV, JSON. & Baseline & US5 \\
+\hline
+FR6 & The system must present graphs showing air quality evolution, with interactive date range and pollutant controls. & Baseline & US6 \\
+\hline
+FR7 & The system must allow users to export historical data in CSV and JSON formats. & Baseline & US7 \\
+\hline
+FR8 & The system must provide rule-based recommendations based on location and current air quality. & Baseline & US7 \\
+\hline
+FR9 & The system must send alerts when configurable AQI thresholds are exceeded. & Baseline & US8 \\
+\hline
+FR10 & The system may suggest protective measures (masks, air purifiers) as informational guidance during high pollution. & Optional & US9 \\
+\hline
+FR11 & The system may provide map-based visualization with air quality overlays (future enhancement). & Future Work & US11 \\
+\hline
+FR12 & The system must support geographic search by country, city, or region. & Baseline & US10 \\
+\hline
+FR13 & The system must provide a responsive web interface for mobile, tablet, and desktop. & Baseline & US11 \\
+\hline
+FR14 & The system may allow users to share air quality views via shareable URLs. & Optional & US12 \\
+\hline
+\end{tabular}
+\caption{Summary of Functional Requirements}
+\label{tab:fr_summary}
+\end{table}
+
+\subsection{Baseline Functional Requirements (Core Platform)}
+
+\paragraph{FR1 -- Periodic Data Collection:}
+The system collects air quality data from external APIs (AQICN, Google Air Quality API, IQAir) at configurable intervals (baseline: 10-60 minutes). Data is normalized, validated, and persisted to the relational database. Failed ingestions are logged with error details for operational monitoring.
+
+\paragraph{FR2, FR7 -- Historical Data Querying and Export:}
+Users can filter historical records by date range, location, and pollutant type. Results are paginated and can be exported in CSV or JSON format, supporting research and external analysis.
+
+\paragraph{FR3 -- Unified Data Presentation:}
+Regardless of source API, air quality information is normalized into a consistent schema, preventing user confusion from conflicting measurements or units.
+
+\paragraph{FR4 -- Key Performance Indicator Dashboards:}
+Dashboards display current AQI, primary pollutant, recent trends, and station information, sourced from latest ingested readings and pre-computed daily aggregates.
+
+\paragraph{FR5 -- Custom Report Generation:}
+Users specify filters (date range, location, pollutants) and download reports on-demand in CSV or JSON format.
+
+\paragraph{FR6 -- Interactive Time-Series Visualization:}
+Graphs display air quality evolution with controls for toggling pollutants and adjusting date ranges.
+
+\paragraph{FR8 -- Rule-Based Recommendations:}
+The system generates deterministic health guidance based on measured AQI and pollutant levels, aligned with EPA AQI bands and WHO exposure guidelines.
+
+\paragraph{FR9 -- Configurable Alert System:}
+Users configure alerts by location, pollutant, AQI threshold, and notification channel (email, in-app). When thresholds are exceeded, alerts are recorded and delivered.
+
+\paragraph{FR12 -- Geographic Search:}
+Users search air quality data by country, city, or region, with results filtered accordingly.
+
+\paragraph{FR13 -- Responsive Web Design:}
+The interface adapts to mobile, tablet, and desktop viewports without breaking layout or hiding essential controls.
+
+\subsection{Optional and Future Requirements}
+
+\paragraph{FR10 -- Informational Protective Measures:}
+Text suggestions appear during high pollution, recommending masks, air purifiers, or limiting outdoor exposure (informational only, no e-commerce).
+
+\paragraph{FR11 -- Interactive Maps:}
+A future enhancement providing map-based visualization with air quality overlays (explicitly out of scope for baseline course deliverable).
+
+\paragraph{FR14 -- Social Media Sharing:}
+Users can obtain shareable URLs and share via social media; shared links preserve filters for recipients.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Non-Functional Requirements (NFR)}
+\label{sec:app_nfr}
+
+Non-functional requirements specify performance, reliability, scalability, and usability targets.
+
+\subsection{Performance Requirements}
+
+\begin{itemize}
+    \item \textbf{NFR1 -- Dashboard Latency:} Dashboard queries must return results within 2 seconds under normal load (100+ concurrent users).
+    
+    \item \textbf{NFR2 -- Historical Query Latency:} Queries spanning months of historical data must complete within 5 seconds.
+    
+    \item \textbf{NFR3 -- Ingestion Throughput:} The pipeline must process and persist at least 1,000 readings per 10-minute cycle.
+    
+    \item \textbf{NFR4 -- API Response Time:} REST API endpoints must respond within 1 second for paginated results.
+\end{itemize}
+
+\subsection{Reliability and Availability}
+
+\begin{itemize}
+    \item \textbf{NFR5 -- System Uptime:} Target 99.5\% uptime during business hours with graceful degradation if external APIs fail.
+    
+    \item \textbf{NFR6 -- Data Integrity:} All records maintain referential integrity; duplicate readings are deduplicated.
+    
+    \item \textbf{NFR7 -- Ingestion Reliability:} Failed cycles are logged; retry mechanism for transient failures.
+    
+    \item \textbf{NFR8 -- Audit Trail:} All ingestion activities logged with source, timestamp, and result status.
+\end{itemize}
+
+\subsection{Scalability}
+
+\begin{itemize}
+    \item \textbf{NFR9 -- Concurrent Users:} Support up to 1,000 concurrent web users without latency degradation.
+    
+    \item \textbf{NFR10 -- Data Volume:} Database designed to scale to 10+ million readings across years and stations.
+    
+    \item \textbf{NFR11 -- Horizontal Scalability:} Architecture supports future geographic partitioning or multi-city deployments.
+\end{itemize}
+
+\subsection{Usability}
+
+\begin{itemize}
+    \item \textbf{NFR12 -- Responsive Design:} Interface adapts to mobile, tablet, and desktop viewports (WCAG 2.1 Level AA).
+    
+    \item \textbf{NFR13 -- Accessibility:} Following WCAG guidelines for contrast, font sizing, and keyboard navigation.
+    
+    \item \textbf{NFR14 -- Documentation:} Complete API documentation, deployment guides, and user-facing help on AQI scales and recommendations.
+\end{itemize}
+
+\subsection{Security and Data Privacy}
+
+\begin{itemize}
+    \item \textbf{NFR15 -- Authentication:} Basic public access to dashboards; authenticated users can configure alerts and preferences.
+    
+    \item \textbf{NFR16 -- Data Retention:} Historical air quality data retained 3+ years; personal data deleted upon request.
+    
+    \item \textbf{NFR17 -- Encryption:} All communication via HTTPS/TLS 1.2+; sensitive data encrypted at rest.
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Revision History}
+\label{sec:app_req_history}
+
+Requirements were refined across three development phases:
+
+\begin{enumerate}
+    \item \textbf{Workshop 1:} Initial 14 FR and 8 NFR identified; scope boundaries unclear.
+    
+    \item \textbf{Workshop 2:} "Real-time" replaced with "periodic"; machine learning removed from baseline; FR10 marked optional.
+    
+    \item \textbf{Workshop 3 (Final):} Requirements finalized; traceability established to 14 user stories; baseline scope locked for course deliverable.
+\end{enumerate}
+
+Final requirements align with Delivery 3 baseline architecture (Chapters~3--5) and have been validated against implementation progress.

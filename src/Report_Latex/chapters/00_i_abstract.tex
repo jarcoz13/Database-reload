@@ -2,15 +2,18 @@
 % Guidance of how to write an abstract/summary provided by Nature: https://cbs.umn.edu/sites/cbs.umn.edu/files/public/downloads/Annotated_Nature_abstract.pdf %https://writingcenter.gmu.edu/guides/writing-an-abstract
 \chapter*{\center \Large  Abstract}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Replace all text with your text
+% Abstract: 200-250 words summarizing problem, approach, design decisions, and key results
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-Air pollution remains the second leading cause of premature death worldwide, with disproportionate impacts on Latin American megacities such as Bogotá. This report presents a comprehensive cloud-ready architecture designed to integrate real-time air quality data from multiple sources and provide personalized health recommendations to citizens. The system collects ten-minute data streams from environmental sensors and third-party APIs (AQICN, Google Air Quality, and IQAir) using a Python Ingestor with raw storage in MinIO. A lightweight normalization pipeline transforms heterogeneous payloads before inserting records into a monthly-partitioned PostgreSQL database extended with TimescaleDB hypertables for efficient time-series operations. Query acceleration is achieved through concurrently refreshed materialized views that support an API layer (REST + GraphQL) designed to serve real-time dashboards and personalized health recommendations. The architecture includes a recommendation engine that translates AQI thresholds and user metadata into color-coded health advice and protective product suggestions during high pollution periods. The system targets p95 latencies below 2 seconds under 1000 concurrent users, with an initial deployment covering three years (2022–2024) of Bogotá air quality data. This work addresses the critical gap between raw environmental data availability and actionable citizen-oriented decision support, demonstrating how modern database technologies can be leveraged to improve public health outcomes in urban environments.
+Air pollution continues to be a major public health challenge, particularly in large Latin American cities such as Bogotá, where PM$_{2.5}$ concentrations frequently exceed WHO exposure guidelines. Citizens and policymakers lack access to integrated, timely, and personalized air quality information despite the existence of multiple data sources (AQICN, Google Air Quality API, IQAir). This fragmentation creates barriers to informed decision-making about outdoor activities and health precautions, particularly affecting vulnerable populations including children, elderly individuals, and those with respiratory conditions.
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%s
-~\\[1cm]
+This report presents a practical and reproducible architecture for addressing this gap by integrating periodic air quality data from multiple providers, normalizing records into a unified relational schema, and delivering personalized, rule-based health recommendations to citizens in Bogotá. The baseline implementation centers on PostgreSQL with declarative temporal partitioning and materialized views, combined with a lightweight NoSQL store for user preferences and dashboard configuration. A Python-based periodic ingestion pipeline (10-minute cycles) normalizes heterogeneous API payloads and performs batched inserts aligned with temporal partitions. The API layer exposes REST endpoints for dashboards and recommendations; the recommendation logic maps AQI thresholds and basic user metadata to evidence-based health guidance aligned with EPA and WHO guidelines.
+
+The design achieves performance targets suitable for city-scale deployment: sub-2-second dashboard query response times over datasets exceeding one million records, support for up to 1,000 concurrent users, and 10-minute data freshness. Key contributions include a documented normalized schema (Third Normal Form) with optimized indexing and partitioning strategies, a unified data ingestion and normalization pipeline, and a transparent, explainable recommendation system. Advanced components—including dedicated object storage for raw payloads (MinIO), TimescaleDB time-series extensions, and machine learning models—are documented as future enhancements. This work establishes a foundation for scaling to multi-city deployments and integrating advanced analytics capabilities.
+
+~\\[0.5cm]
 \noindent % Provide your key words
-\textbf{Keywords:} Air Quality Index (AQI), TimescaleDB, PostgreSQL partitioning, MinIO, Materialized Views, Personalized Recommendation
+\textbf{Keywords:} Air Quality Monitoring, PostgreSQL Partitioning, Materialized Views, Data Normalization, Rule-based Recommendations, Environmental Health Informatics
 
 \vfill
 \noindent

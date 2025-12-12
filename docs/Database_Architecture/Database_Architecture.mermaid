@@ -1,71 +1,104 @@
 graph TD
-    %% CLIENTS
-    subgraph Clients
-        CitizenWeb[Citizen Web Client]
-        Researcher[Researcher Client]
-        Admin[Technical Admin Client]
+    %% ====================================================================
+    %% CLIENT LAYER
+    %% ====================================================================
+    subgraph Clients["🌐 CLIENT LAYER"]
+        CitizenWeb["👤 Citizen Web Client<br/>(Dashboard, Alerts)"]
+        Researcher["🔬 Researcher Client<br/>(Data Export, Analytics)"]
+        Admin["⚙️ Admin Client<br/>(System Management)"]
     end
 
-    %% WEB FRONTEND
-    subgraph WebLayer
-        WebFrontend[Web Frontend Application]
+    %% ====================================================================
+    %% PRESENTATION LAYER
+    %% ====================================================================
+    subgraph Presentation["🎨 PRESENTATION LAYER"]
+        WebFrontend["Web Frontend<br/>(React/Vue + TypeScript)<br/>Responsive Design"]
     end
 
+    %% ====================================================================
     %% API LAYER
-    subgraph APILayer
-        ApiPublic[Public REST API]
-        ApiAdmin[Admin REST API]
+    %% ====================================================================
+    subgraph APILayer["🔌 API LAYER (REST/JSON)"]
+        ApiPublic["📤 Public REST API<br/>(Citizen & Researcher)<br/>Read: AQI, History, Alerts"]
+        ApiAdmin["🔐 Admin REST API<br/>(Administration)<br/>User Mgmt, Config, Logs"]
     end
 
-    %% DATA CORE
-    subgraph DataLayer
-        PG[PostgreSQL Operational and Analytics]
-        NoSQL[NoSQL Document Store]
+    %% ====================================================================
+    %% DATA PERSISTENCE LAYER
+    %% ====================================================================
+    subgraph DataLayer["💾 DATA PERSISTENCE LAYER"]
+        PG["🐘 PostgreSQL + TimescaleDB<br/>- Operational Data<br/>- Raw Readings (Hypertable)<br/>- Users, Alerts, Recommendations<br/>- Daily Aggregates (Analytical)"]
+        NoSQL["📋 NoSQL Document Store<br/>(MongoDB/Cosmos DB)<br/>- User Preferences<br/>- Dashboard Configs"]
     end
 
-    %% BATCH JOBS
-    subgraph BatchJobs
-        ExternalAPI[External Air Quality APIs]
-        IngestionJob[Ingestion Job Scheduled]
-        Normalizer[Normalizer and Validator]
-        DailyAgg[Daily Aggregation Job]
+    %% ====================================================================
+    %% BATCH PROCESSING LAYER
+    %% ====================================================================
+    subgraph BatchJobs["⚡ BATCH PROCESSING LAYER (Scheduled Jobs)"]
+        ExternalAPI["🌍 External Air Quality APIs<br/>(AQICN, Google, IQAir)"]
+        IngestionJob["📥 Ingestion Job<br/>(10-60 min interval)<br/>Fetch raw JSON payloads"]
+        Normalizer["🔧 Normalizer & Validator<br/>- Schema validation<br/>- Unit harmonization<br/>- Deduplication<br/>- Timestamp normalization"]
+        DailyAgg["📊 Daily Aggregation Job<br/>(Off-peak, 1x/day)<br/>Compute AQI stats"]
     end
 
-    %% OBSERVABILITY
-    subgraph Observability
-        AppLogs[Application Logs]
+    %% ====================================================================
+    %% OBSERVABILITY LAYER
+    %% ====================================================================
+    subgraph Observability["📈 OBSERVABILITY"]
+        AppLogs["📝 Application Logs<br/>(Structured Logging)<br/>- API requests/responses<br/>- Ingestion metrics<br/>- Errors & alerts"]
     end
 
-    %% CLIENTS -> WEB
-    CitizenWeb --> WebFrontend
-    Researcher --> WebFrontend
-    Admin --> WebFrontend
+    %% ====================================================================
+    %% CONNECTIONS: CLIENT -> PRESENTATION
+    %% ====================================================================
+    CitizenWeb -->|Web Browser HTTPS| WebFrontend
+    Researcher -->|Web Browser HTTPS| WebFrontend
+    Admin -->|Web Browser HTTPS| WebFrontend
 
-    %% WEB -> API
+    %% ====================================================================
+    %% CONNECTIONS: PRESENTATION -> API
+    %% ====================================================================
     WebFrontend -->|REST JSON| ApiPublic
     WebFrontend -->|REST JSON Admin| ApiAdmin
 
-    %% API -> DATA
-    ApiPublic --> PG
-    ApiPublic --> NoSQL
-    ApiAdmin --> PG
-    ApiAdmin --> NoSQL
+    %% ====================================================================
+    %% CONNECTIONS: API -> DATA
+    %% ====================================================================
+    ApiPublic -->|Read/Write| PG
+    ApiPublic -->|Read/Write| NoSQL
+    ApiAdmin -->|Read/Write| PG
+    ApiAdmin -->|Read/Write| NoSQL
 
-    %% INGESTION FLOW
-    ExternalAPI --> IngestionJob
-    IngestionJob --> Normalizer
-    Normalizer --> PG
+    %% ====================================================================
+    %% CONNECTIONS: BATCH JOBS -> DATA
+    %% ====================================================================
+    ExternalAPI -->|API Calls| IngestionJob
+    IngestionJob -->|Raw Payloads| Normalizer
+    Normalizer -->|Insert/Upsert| PG
+    DailyAgg -->|Query & Aggregate| PG
+    DailyAgg -->|Insert Stats| PG
 
-    %% DAILY AGGREGATION
-    DailyAgg --> PG
+    %% ====================================================================
+    %% CONNECTIONS: ALL -> OBSERVABILITY
+    %% ====================================================================
+    ApiPublic -->|Log Events| AppLogs
+    ApiAdmin -->|Log Events| AppLogs
+    IngestionJob -->|Log Events| AppLogs
+    Normalizer -->|Log Events| AppLogs
+    DailyAgg -->|Log Events| AppLogs
 
-    %% API READS
-    ApiPublic -. Read current and daily stats .-> PG
-    ApiPublic -. Read preferences and dashboards .-> NoSQL
+    %% ====================================================================
+    %% STYLING
+    %% ====================================================================
+    classDef clientStyle fill:#e1f5fe,stroke:#01579b,stroke-width:2px,color:#000
+    classDef apiStyle fill:#f3e5f5,stroke:#4a148c,stroke-width:2px,color:#000
+    classDef dataStyle fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px,color:#000
+    classDef batchStyle fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000
+    classDef obsStyle fill:#fce4ec,stroke:#880e4f,stroke-width:2px,color:#000
 
-    %% LOGS
-    ApiPublic --> AppLogs
-    ApiAdmin --> AppLogs
-    IngestionJob --> AppLogs
-    Normalizer --> AppLogs
-    DailyAgg --> AppLogs
+    class Clients clientStyle
+    class Presentation clientStyle
+    class APILayer apiStyle
+    class DataLayer dataStyle
+    class BatchJobs batchStyle
+    class Observability obsStyle

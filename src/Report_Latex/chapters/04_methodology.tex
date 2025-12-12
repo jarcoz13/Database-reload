@@ -1,0 +1,856 @@
+% Methodology chapter aligned with Delivery 3 baseline (long version)
+\chapter{Database Design Methodology}
+\label{ch:method}
+
+This chapter details the methodology and design procedures used to implement the system architecture described in Chapter~\ref{ch:architecture}. The focus is the Delivery 3 baseline, centered on PostgreSQL as the primary data store, periodic ingestion (e.g., every 10 minutes), a normalized schema up to Third Normal Form (3NF), indexing and partitioning strategies for analytical queries, a REST API, and a rule-based recommendation subsystem. Technologies such as TimescaleDB hypertables, MinIO object storage, full NoSQL ingestion pipelines, and GraphQL are considered future work and are not required in the baseline.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Objectives}
+\label{sec:method_objectives}
+
+The methodology pursues the following objectives:
+\begin{enumerate}
+  \item Provide a normalized relational schema on PostgreSQL for stations, pollutants, and time-series readings.
+  \item Implement a periodic ingestion pipeline (baseline: 10-minute polling) to validate, normalize, and persist observations reliably.
+  \item Define index and partition strategies that support the platform’s key analytics and dashboard queries with predictable latency.
+  \item Deliver a simple, rule-based recommendation mechanism for alerts and informational guidance.
+  \item Specify a reproducible performance validation plan that can be executed in future iterations (JMeter scenarios, EXPLAIN/ANALYZE checks, and basic monitoring).
+\end{enumerate}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Scope}
+\label{sec:method_scope}
+
+The scope of this deliverable includes a single-city deployment (Bogotá), ingestion of selected historical and current datasets, and a web-based interface consuming REST endpoints. The baseline focuses on:
+\begin{itemize}
+  \item PostgreSQL as the core datastore with declarative temporal partitioning (by month) for the main readings table.
+  \item A normalized schema (to 3NF) for canonical entities and relationships.
+  \item Indexing and materialized views targeting common analytical and dashboard queries.
+  \item A rule-based alerting and recommendation subsystem based on measured AQI thresholds.
+\end{itemize}
+
+Out of scope for the baseline: strict real-time ingestion, production-grade multi-region replication, GraphQL, full object storage for raw payloads, and machine-learning-based recommendations. These are documented as potential enhancements.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Assumptions}
+\label{sec:method_assumptions}
+
+The following assumptions guided the design:
+\begin{itemize}
+  \item Provider payloads expose station identifiers and timestamps that can be normalized to UTC.
+  \item A 10-minute polling interval is representative of provider update cadence and dashboard requirements.
+  \item A modest single-node database host (e.g., 4 vCPU, 16 GB RAM) is available for baseline testing.
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Limitations}
+\label{sec:method_limitations}
+
+The baseline does not implement strict real-time ingestion, automatic failover, or multi-region replication. Recommendations are informative and not clinically validated. External API quotas and data quality may affect completeness and timeliness of ingested data.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Database Design Methodology}
+\label{subsec:method_dbdesign}
+
+The database design followed a systematic, iterative process spanning three phases: conceptual modeling (requirements → entities and relationships), logical modeling (entity normalization to 3NF), and physical implementation (PostgreSQL schema with indexing and partitioning). This section details each phase, the normalization decisions made, and justifies key design trade-offs.
+
+\subsubsection{Phase 1: Conceptual Modeling}
+
+\textbf{Purpose:} Identify real-world entities, their attributes, and relationships without concern for storage mechanisms or normalization.
+
+\textbf{Core Entities Identified:}
+
+\begin{itemize}
+    \item \textbf{Station:} Represents a geographic monitoring location with metadata (name, city, country, latitude, longitude, provider association). Each station is the spatial anchor for all measurements.
+    
+    \item \textbf{Pollutant:} Represents a chemical air pollutant (PM$_{2.5}$, PM$_{10}$, NO$_2$, O$_3$, SO$_2$, CO) with measurement units and health significance. Reference data maintained separately to enable pollutant-specific filtering and aggregation.
+    
+    \item \textbf{Provider:} Represents an external data source API (AQICN, Google Air Quality API, IQAir). Tracks authentication details, endpoint URLs, and ingestion frequency to enable provider-specific polling and error handling.
+    
+    \item \textbf{AirQualityReading:} Represents a single measurement event: (station, pollutant, timestamp, concentration value, AQI index, provider). This is the primary fact table growing continuously with ingestion.
+    
+    \item \textbf{AppUser:} Represents a registered user with authentication credentials, profile information (name, email, phone), registration date, and account status (active/inactive).
+    
+    \item \textbf{Alert:} Represents a user-configured threshold. When air quality exceeds the threshold, the system triggers notifications or recommendations.
+    
+    \item \textbf{Recommendation:} Represents a system-generated health guidance message linked to detected air quality conditions (e.g., ``Wear N95 mask if PM$_{2.5}$ exceeds 150'').
+    
+    \item \textbf{ProductRecommendation:} Associates protective products (masks, filters, supplements) with recommendations, supporting future product discovery features.
+\end{itemize}
+
+\textbf{Relationships (Conceptual Level):}
+
+\begin{itemize}
+    \item AirQualityReading ---is measured at--- Station
+    \item AirQualityReading ---measures--- Pollutant
+    \item AirQualityReading ---provided by--- Provider
+    \item Alert ---configured by--- AppUser
+    \item Alert ---is for--- Station and Pollutant
+    \item Recommendation ---is for--- AppUser
+    \item ProductRecommendation ---extends--- Recommendation
+\end{itemize}
+
+These relationships form the basis for foreign key constraints and join patterns in the logical schema.
+
+---
+
+\subsubsection{Phase 2: Logical Modeling and Normalization to 3NF}
+
+\textbf{Purpose:} Transform the conceptual model into a relational schema that eliminates data redundancy and anomalies while maintaining query performance and referential integrity.
+
+\textbf{Normalization Process:}
+
+\paragraph{Step 1: Identify Unnormalized Facts}
+
+Begin with a simple ``flat'' reading record containing all attributes:
+
+\begin{verbatim}
+AirQualityFact(
+  reading_id, station_id, station_name, station_city, 
+  station_country, station_latitude, station_longitude,
+  pollutant_id, pollutant_name, pollutant_unit,
+  provider_id, provider_name, provider_url,
+  datetime, value, aqi
+)
+\end{verbatim}
+
+This unnormalized structure contains:
+\begin{itemize}
+  \item \textbf{Repeating groups:} Station metadata (name, city, country, coordinates) is repeated for every reading at that station.
+  \item \textbf{Transitive dependencies:} \texttt{station\_city} depends on \texttt{station\_id}, not on the primary key \texttt{reading\_id}.
+  \item \textbf{Update anomalies:} Changing a station name requires updating thousands of historical readings.
+  \item \textbf{Storage redundancy:} The same station metadata is replicated across millions of readings.
+\end{itemize}
+
+---
+
+\paragraph{Step 2: First Normal Form (1NF) — Eliminate Repeating Groups}
+
+Ensure all attributes are atomic (single-valued). Since the original flat structure already satisfies atomicity, 1NF is achieved by removing any composite attributes. The key insight is that each tuple represents a single fact (one reading at one time), not a collection.
+
+Result: The \texttt{AirQualityFact} table remains as stated above but is now in 1NF because each cell contains a single value, not a set or composite.
+
+---
+
+\paragraph{Step 3: Second Normal Form (2NF) — Eliminate Partial Dependencies}
+
+A table is in 2NF if:
+\begin{enumerate}
+  \item It is in 1NF, AND
+  \item Every non-key attribute depends on the \textbf{entire primary key}, not just part of it.
+\end{enumerate}
+
+Partial dependencies identified in \texttt{AirQualityFact}:
+
+\begin{itemize}
+  \item \textbf{Station attributes} (name, city, country, latitude, longitude) depend on \texttt{station\_id} alone, not on the full composite key (reading\_id, station\_id, pollutant\_id, datetime).
+  
+  \item \textbf{Pollutant attributes} (name, unit) depend on \texttt{pollutant\_id} alone, not the entire key.
+  
+  \item \textbf{Provider attributes} (name, url) depend on \texttt{provider\_id} alone, not the entire key.
+\end{itemize}
+
+\textbf{Resolution:} Decompose \texttt{AirQualityFact} into separate tables:
+
+\begin{verbatim}
+-- Primary fact table (measures only)
+AirQualityReading(
+  reading_id PRIMARY KEY,
+  station_id FOREIGN KEY → Station,
+  pollutant_id FOREIGN KEY → Pollutant,
+  provider_id FOREIGN KEY → Provider,
+  datetime,
+  value,
+  aqi
+)
+
+-- Dimension: Stations
+Station(
+  station_id PRIMARY KEY,
+  name, city, country, latitude, longitude
+)
+
+-- Dimension: Pollutants
+Pollutant(
+  pollutant_id PRIMARY KEY,
+  name, unit
+)
+
+-- Dimension: Providers
+Provider(
+  provider_id PRIMARY KEY,
+  name, url, api_endpoint, authentication_type
+)
+\end{verbatim}
+
+Now:
+\begin{itemize}
+  \item \texttt{AirQualityReading} is in 2NF: all non-key attributes (value, aqi) depend on the entire key (reading\_id).
+  \item \texttt{Station}, \texttt{Pollutant}, \texttt{Provider} are single-attribute tables in 2NF by definition.
+\end{itemize}
+
+---
+
+\paragraph{Step 4: Third Normal Form (3NF) — Eliminate Transitive Dependencies}
+
+A table is in 3NF if:
+\begin{enumerate}
+  \item It is in 2NF, AND
+  \item No non-key attribute depends on another non-key attribute (i.e., no transitive dependencies through intermediate attributes).
+\end{enumerate}
+
+\textbf{Analysis of the 2NF tables:}
+
+\begin{itemize}
+  \item \textbf{AirQualityReading:} All non-key attributes (value, aqi) depend directly on the primary key (reading\_id). No transitive dependencies. \textbf{Already in 3NF.}
+  
+  \item \textbf{Station:} All attributes (name, city, country, latitude, longitude) depend directly on the primary key (station\_id). No transitive dependencies. \textbf{Already in 3NF.}
+  
+  \item \textbf{Pollutant:} All attributes (name, unit) depend directly on the primary key (pollutant\_id). \textbf{Already in 3NF.}
+  
+  \item \textbf{Provider:} All attributes (name, url, etc.) depend directly on the primary key (provider\_id). \textbf{Already in 3NF.}
+  
+  \item \textbf{AppUser:} Core attributes (email, password\_hash, name, created\_at) depend on user\_id. \textbf{Already in 3NF.}
+  
+  \item \textbf{Alert, Recommendation, ProductRecommendation:} Similar analysis shows these are in 3NF by virtue of their primary keys and lack of transitive dependencies.
+\end{itemize}
+
+\textbf{3NF Achievement:} The schema from Step 3, with the addition of user and recommendation tables, satisfies 3NF. This eliminates:
+\begin{itemize}
+  \item Redundant storage of station metadata (from millions of rows down to one per station)
+  \item Update anomalies (change station name once, not across millions of readings)
+  \item Insertion anomalies (insert a new pollutant without needing a reading)
+  \item Deletion anomalies (delete a reading without losing station or pollutant metadata)
+\end{itemize}
+
+---
+
+\textbf{Denormalization Decision for Analytics:}
+
+While the core schema is in 3NF, we introduce one carefully justified denormalization for analytical performance: the \texttt{AirQualityDailyStats} table.
+
+\begin{verbatim}
+AirQualityDailyStats(
+  date DATE,
+  station_id FOREIGN KEY,
+  pollutant_id FOREIGN KEY,
+  avg_value DOUBLE PRECISION,
+  min_value DOUBLE PRECISION,
+  max_value DOUBLE PRECISION,
+  percentile_95 DOUBLE PRECISION,
+  reading_count INTEGER,
+  UNIQUE(date, station_id, pollutant_id)
+)
+\end{verbatim}
+
+This table technically violates 3NF (it contains derived, aggregated attributes depending transitively on (date, station\_id, pollutant\_id)). However, the benefit justifies the trade-off:
+
+\begin{itemize}
+  \item \textbf{Performance gain:} Query 2 (monthly historical averages) scans 2,400 daily stats instead of 85,000 raw readings (35$\times$ reduction).
+  \item \textbf{Maintenance burden:} Daily Aggregation Job runs once per day during off-peak, refreshing only new data.
+  \item \textbf{Data freshness:} Aggregates are updated daily, sufficient for analytical use cases that tolerate hour-level latency.
+  \item \textbf{Auditability:} Raw readings remain intact; aggregates are deterministic and reproducible from raw data.
+\end{itemize}
+
+---
+
+\subsubsection{Phase 3: Physical Implementation}
+
+\textbf{Purpose:} Translate the normalized logical schema into PostgreSQL table definitions with data types, constraints, and optimization structures.
+
+\textbf{Key Implementation Decisions:}
+
+\begin{itemize}
+    \item \textbf{Primary Keys:} All tables use \texttt{SERIAL} (auto-incrementing integers) or \texttt{UUID} for surrogate keys, enabling efficient joins and foreign key references. Natural keys (e.g., station name) are avoided because they are subject to change.
+    
+    \item \textbf{Foreign Keys:} All references between tables are enforced via PostgreSQL \texttt{FOREIGN KEY} constraints with \texttt{ON DELETE RESTRICT} (prevent orphaned readings when a provider is deleted) or \texttt{ON DELETE CASCADE} (delete recommendations when a user is deleted).
+    
+    \item \textbf{Unique Constraints:} The constraint \texttt{UNIQUE(station\_id, pollutant\_id, datetime)} on \texttt{AirQualityReading} prevents duplicates from multiple providers reporting identical measurements simultaneously. This is critical for ingestion idempotency.
+    
+    \item \textbf{Data Types:} 
+    \begin{itemize}
+      \item Timestamps use \texttt{TIMESTAMP WITH TIME ZONE} (always UTC) to avoid timezone confusion.
+      \item Concentrations use \texttt{DOUBLE PRECISION} for precision over 2 decimal places.
+      \item AQI values use \texttt{INTEGER} (EPA AQI is integer-valued).
+      \item Coordinates use \texttt{NUMERIC(10,6)} to avoid floating-point precision issues.
+    \end{itemize}
+    
+    \item \textbf{Temporal Partitioning:} The \texttt{AirQualityReading} table is partitioned monthly by the \texttt{datetime} column. This enables:
+    \begin{itemize}
+      \item Partition pruning: queries on recent data prune old partitions without scanning them.
+      \item Efficient retention: delete old partitions (drop entire partition in O(1) instead of DELETE millions of rows).
+      \item Parallel index maintenance: VACUUM and ANALYZE can target recent partitions.
+    \end{itemize}
+    
+    \item \textbf{Indexes:} Aligned to the five core queries (Section~\ref{subsec:method_indexing}), with composite, partial, and covering indexes optimized for the specific access patterns.
+    
+    \item \textbf{Statistics:} The \texttt{ANALYZE} command computes table statistics (row counts, value distributions) enabling PostgreSQL's query planner to choose optimal join orders and index strategies.
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Data Ingestion}
+\label{subsec:method_ingest}
+
+The ingestion service (Python) performs periodic polling of providers and executes the following steps per cycle:
+\begin{enumerate}
+  \item Fetch JSON payloads for targeted stations/areas in Bogotá.
+  \item Validate the payloads (schema presence, timestamps parsable), normalize to the canonical schema and UTC.
+  \item Deduplicate and upsert into the partitioned \texttt{airquality\_reading} table using the uniqueness constraint.
+  \item Emit logs and basic metrics for observability. Raw payload persistence to object storage is considered future work.
+\end{enumerate}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Normalization and Storage}
+\label{subsec:method_normalization}
+
+Normalization ensures consistent semantics across sources:
+\begin{itemize}
+  \item Field mapping from provider-specific names (e.g., \texttt{pm25}, \texttt{PM2\_5}) to canonical columns (e.g., \texttt{pm25}).
+  \item Unit harmonization (e.g., to $\mu$g/m$^{3}$) and value-range validation.
+  \item UTC-timestamp normalization and enforcement of (station, pollutant, datetime) uniqueness during inserts/upserts.
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{NoSQL Data Model for User Preferences and Dashboards}
+\label{subsec:method_nosql}
+
+While the core relational schema captures all operational and analytical air quality data, the platform requires a secondary data layer for rapidly evolving, semi-structured user configuration data. This section justifies the use of a lightweight NoSQL document store (MongoDB or Azure Cosmos DB) and details the data model.
+
+\subsubsection{Motivation for NoSQL}
+
+The relational schema's normalized structure excels at managing structured, long-lived entities (stations, pollutants, readings) where schema consistency and referential integrity are critical. However, user configuration data exhibits different characteristics:
+
+\begin{itemize}
+    \item \textbf{Schema Evolution:} As the platform evolves, new preference fields are added (e.g., ``notification\_quiet\_hours'', ``export\_format'', ``language''). With relational JSONB columns, each new field requires schema migration SQL. With NoSQL, new fields are added ad-hoc without schema changes.
+    
+    \item \textbf{Nested Structures:} Dashboard configurations contain deeply nested widget specifications (widget type, pollutant filter, time range, refresh frequency). Storing these as JSONB in PostgreSQL complicates queries (e.g., ``find all users with a PM$_{2.5}$ trend widget''). Document stores handle nested queries natively.
+    
+    \item \textbf{Flexible Attributes:} Different users may need different sets of preferences (some want SMS alerts, others only email). JSONB rows become sparse and inconsistent. Document stores handle optional attributes transparently.
+    
+    \item \textbf{Read/Write Patterns:} Preferences are accessed on every dashboard load (read-heavy, low latency required) and updated infrequently. NoSQL databases with fast single-document lookups are optimized for this pattern.
+    
+    \item \textbf{Isolation:} By separating configuration data into NoSQL, the relational schema remains focused on business entities (air quality data) without polluting it with user-specific customization. This separation of concerns simplifies both the relational schema and the document model.
+\end{itemize}
+
+\textbf{Design Decision:} Use a lightweight NoSQL document store for user preferences and dashboard configurations, keeping the relational schema clean and normalized for operational data.
+
+---
+
+\subsubsection{NoSQL Collections}
+
+\paragraph{Collection 1: user\_preferences}
+
+\textbf{Purpose:} Store user-level customization settings that personalize the platform experience.
+
+\textbf{Document Structure:}
+
+\begin{verbatim}
+{
+  "_id": ObjectId,                    // MongoDB primary key
+  "user_id": <integer>,                // Foreign key to AppUser
+  "theme": "light" | "dark",           // UI theme preference
+  "default_city": "Bogota",            // Primary city for dashboard
+  "favorite_stations": [
+    {"station_id": 1, "label": "Usaquen"},
+    {"station_id": 5, "label": "Kennedy"}
+  ],
+  "favorite_pollutants": [
+    {"pollutant_id": 1, "name": "PM2.5"},
+    {"pollutant_id": 2, "name": "PM10"}
+  ],
+  "notifications": {
+    "channels": ["email", "in_app"],    // Notification delivery methods
+    "quiet_hours": {
+      "enabled": true,
+      "start": "22:00",                 // 24-hour format
+      "end": "08:00"
+    },
+    "alert_frequency": "immediate" | "daily_digest"
+  },
+  "language": "es" | "en",             // UI language preference
+  "measurement_units": "metric" | "imperial",  // For display
+  "last_updated": ISODate("2025-12-12T..."),   // Timestamp
+  "created_at": ISODate("2025-01-01T...")
+}
+\end{verbatim}
+
+\textbf{Typical Usage Patterns:}
+
+\begin{itemize}
+    \item \textbf{Load on dashboard initialization:} \texttt{db.user\_preferences.findOne(\{user\_id: 42\})}
+    \item \textbf{Update theme:} \texttt{db.user\_preferences.updateOne(\{user\_id: 42\}, \{\$set: \{theme: "dark"\}\})}
+    \item \textbf{Add favorite station:} \texttt{db.user\_preferences.updateOne(\{user\_id: 42\}, \{\$push: \{favorite\_stations: ...\}\})}
+\end{itemize}
+
+\textbf{Indexing Strategy:}
+
+\begin{verbatim}
+-- Fast lookup by user_id (loaded on every dashboard load)
+CREATE INDEX idx_user_preferences_user_id 
+ON user_preferences (user_id);
+
+-- Optional: query by language for multi-lingual support
+CREATE INDEX idx_user_preferences_language 
+ON user_preferences (language);
+\end{verbatim}
+
+---
+
+\paragraph{Collection 2: dashboard\_configs}
+
+\textbf{Purpose:} Store per-user dashboard layout and widget configurations, enabling personalized analytics views without rigid schema constraints.
+
+\textbf{Document Structure:}
+
+\begin{verbatim}
+{
+  "_id": ObjectId,
+  "user_id": <integer>,
+  "dashboard_name": "My Air Quality Dashboard",
+  "is_default": true,                  // Whether this is the default view
+  "layout": "2x2" | "3x3" | "custom",  // Grid layout type
+  "widgets": [
+    {
+      "id": "widget_001",
+      "type": "current_aqi",           // Widget type identifier
+      "position": {"row": 0, "col": 0},
+      "size": {"height": 2, "width": 2},
+      "config": {
+        "stations": [1, 3, 5],         // Show AQI for these stations
+        "refresh_interval": 300         // Seconds
+      }
+    },
+    {
+      "id": "widget_002",
+      "type": "pollutant_trend",       // Time-series chart
+      "position": {"row": 0, "col": 2},
+      "size": {"height": 2, "width": 2},
+      "config": {
+        "pollutant_id": 1,             // PM2.5
+        "station_id": 1,               // Usaquen
+        "time_range": "7d",            // Last 7 days
+        "aggregation": "hourly" | "daily"
+      }
+    },
+    {
+      "id": "widget_003",
+      "type": "health_guidance",       // Recommendation widget
+      "position": {"row": 2, "col": 0},
+      "size": {"height": 1, "width": 4},
+      "config": {
+        "show_products": true,         // Display product recommendations
+        "max_recommendations": 5
+      }
+    },
+    {
+      "id": "widget_004",
+      "type": "city_heatmap",          // Geospatial visualization
+      "position": {"row": 0, "col": 4},
+      "size": {"height": 3, "width": 2},
+      "config": {
+        "pollutant_id": 1,
+        "map_type": "leaflet",         // Mapping library
+        "zoom_level": 12,
+        "center": {"lat": 4.7110, "lng": -74.0055}  // Bogota center
+      }
+    }
+  ],
+  "visibility": "private" | "shared",  // Share dashboard with others
+  "shared_with": [10, 15, 20],        // User IDs with access
+  "last_updated": ISODate("2025-12-12T..."),
+  "created_at": ISODate("2025-01-01T...")
+}
+\end{verbatim}
+
+\textbf{Typical Usage Patterns:}
+
+\begin{itemize}
+    \item \textbf{Load user's default dashboard:} \texttt{db.dashboard\_configs.findOne(\{user\_id: 42, is\_default: true\})}
+    \item \textbf{Find dashboards with PM$_{2.5}$ trends:} \texttt{db.dashboard\_configs.find(\{"widgets.type": "pollutant\_trend", "widgets.config.pollutant\_id": 1\})}
+    \item \textbf{Update widget position:} \texttt{db.dashboard\_configs.updateOne(\{...}, \{\$set: \{"widgets.0.position": ...\}\})}
+    \item \textbf{Render dashboard frontend:} Retrieve entire document, iterate over widgets array, instantiate frontend components based on \texttt{type} and \texttt{config}.
+\end{itemize}
+
+\textbf{Indexing Strategy:}
+
+\begin{verbatim}
+-- Fast lookup of user's default dashboard
+CREATE INDEX idx_dashboard_configs_user_default 
+ON dashboard_configs (user_id, is_default);
+
+-- Support for widget-based queries
+CREATE INDEX idx_dashboard_configs_widget_type
+ON dashboard_configs ("widgets.type");
+
+-- Optional: find shared dashboards
+CREATE INDEX idx_dashboard_configs_visibility
+ON dashboard_configs (visibility);
+\end{verbatim}
+
+---
+
+\subsubsection{Integration with Relational Database}
+
+The NoSQL collections reference relational tables through foreign key semantics:
+
+\begin{itemize}
+    \item \textbf{user\_preferences.user\_id} → \texttt{AppUser.id}
+    \item \texttt{dashboard\_configs.user\_id} → \texttt{AppUser.id}
+    \item \texttt{dashboard\_configs.widgets[*].config.stations[*]} → \texttt{Station.id}
+    \item \texttt{dashboard\_configs.widgets[*].config.pollutant\_id} → \texttt{Pollutant.id}
+\end{itemize}
+
+\textbf{Consistency Responsibility:} Since NoSQL does not enforce referential integrity, the application layer must:
+\begin{itemize}
+    \item Validate that referenced station/pollutant IDs exist before saving dashboard configs
+    \item Handle cascading deletes: if a station is deleted, remove it from all dashboard configs' widget filters
+    \item Periodically audit: scan dashboard configs for orphaned references (station\_id pointing to non-existent station)
+\end{itemize}
+
+---
+
+\subsubsection{Performance Considerations}
+
+\begin{itemize}
+    \item \textbf{Document Size:} Typical user\_preferences document is < 2 KB; typical dashboard\_configs document is 5--50 KB. Both fit easily in memory and network buffers.
+    
+    \item \textbf{Read Latency:} Single-document lookups by indexed user\_id execute in < 5 ms, satisfying dashboard load time requirements.
+    
+    \item \textbf{Write Patterns:} Preferences and dashboards are updated infrequently (seconds or minutes timescale), not impacting platform throughput. Ingestion jobs write to relational tables only.
+    
+    \item \textbf{Scaling:} If the number of dashboard configurations grows to millions, MongoDB's sharding by user\_id enables horizontal scaling without application changes.
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Indexing and Query Optimization}
+\label{subsec:method_indexing}
+
+The indexing strategy derives directly from the five core queries identified in the project's Workshop documentation. This section maps each production query to its recommended index, explains the filtering and join patterns that the index addresses, and validates the design through EXPLAIN analysis.
+
+\subsubsection{Core Queries and Index Mapping}
+
+\paragraph{Query 1: Latest Air Quality Readings per Station (Dashboard Display)}
+
+\textbf{Purpose:} Retrieve the most recent air quality measurement for each pollutant across all stations in a given city (e.g., Bogotá). This is the primary dashboard query executed on every user refresh.
+
+\textbf{Query Pattern:}
+\begin{verbatim}
+WITH latest_readings AS (
+  SELECT aqr.id, aqr.station_id, aqr.pollutant_id,
+         aqr.value, aqr.aqi, aqr.datetime,
+         ROW_NUMBER() OVER (PARTITION BY aqr.station_id,
+                            aqr.pollutant_id
+                            ORDER BY aqr.datetime DESC) AS rn
+  FROM AirQualityReading aqr
+  JOIN Station s ON aqr.station_id = s.id
+  WHERE s.city = 'Bogota'
+)
+SELECT s.name, s.latitude, s.longitude, p.name,
+       lr.value, lr.aqi, lr.datetime
+FROM latest_readings lr
+JOIN Station s ON lr.station_id = s.id
+JOIN Pollutant p ON lr.pollutant_id = p.id
+WHERE lr.rn = 1
+ORDER BY s.name, p.name;
+\end{verbatim}
+
+\textbf{Filtering patterns:}
+\begin{itemize}
+  \item \texttt{AirQualityReading} filtered by \texttt{station\_id} (window partition) and sorted by \texttt{datetime DESC} (to find latest)
+  \item \texttt{Station} filtered by \texttt{city} = \texttt{'Bogota'} (join predicate)
+\end{itemize}
+
+\textbf{Recommended indexes:}
+\begin{verbatim}
+-- Primary: composite index supporting station_id filtering + datetime sorting
+CREATE INDEX idx_reading_station_datetime
+ON AirQualityReading (station_id, datetime DESC);
+
+-- Secondary: support for station.city filter
+CREATE INDEX idx_station_city_id
+ON Station (city, id);
+\end{verbatim}
+
+\textbf{Index benefit analysis:}
+\begin{itemize}
+  \item \texttt{idx\_reading\_station\_datetime}: The composite index allows PostgreSQL to fetch readings for a given station ordered by datetime in descending order, eliminating the need for a sequential scan or separate sort step. The window function \texttt{ROW\_NUMBER()} can then quickly identify the latest reading (rn=1) without scanning all historical rows.
+  \item \texttt{idx\_station\_city\_id}: Accelerates the join predicate \texttt{WHERE s.city = 'Bogota'} by using an index scan instead of a full table scan of the \texttt{Station} table.
+\end{itemize}
+
+---
+
+\paragraph{Query 2: Monthly Historical Averages by Pollutant and City (Analytical Queries)}
+
+\textbf{Purpose:} Compute monthly average pollutant concentrations and AQI values for a given city over a date range (e.g., last 3 years). This query supports historical trend analysis for researchers and policymakers and is executed infrequently (once per report generation).
+
+\textbf{Query Pattern:}
+\begin{verbatim}
+SELECT date_trunc('month', stats.date) AS month,
+       AVG(stats.avg_value) AS avg_value,
+       AVG(stats.avg_aqi) AS avg_aqi
+FROM AirQualityDailyStats stats
+JOIN Station s ON stats.station_id = s.id
+JOIN Pollutant p ON stats.pollutant_id = p.id
+WHERE s.city = 'Medellin'
+  AND p.name = 'PM2.5'
+GROUP BY month
+ORDER BY month DESC
+LIMIT 36;
+\end{verbatim}
+
+\textbf{Filtering patterns:}
+\begin{itemize}
+  \item \texttt{AirQualityDailyStats} filtered by \texttt{station\_id} (via join to city) and \texttt{pollutant\_id} (via join to name)
+  \item Aggregation over date ranges grouped by month
+\end{itemize}
+
+\textbf{Recommended index:}
+\begin{verbatim}
+-- Primary: composite index on aggregation table
+CREATE INDEX idx_daily_stats_city_pollutant_date
+ON AirQualityDailyStats (station_id, pollutant_id, date);
+
+-- Secondary: support efficient joins
+CREATE INDEX idx_station_id_city
+ON Station (id, city);
+
+CREATE INDEX idx_pollutant_id_name
+ON Pollutant (id, name);
+\end{verbatim}
+
+\textbf{Index benefit analysis:}
+\begin{itemize}
+  \item \texttt{idx\_daily\_stats\_city\_pollutant\_date}: Composite index on the aggregation table accelerates multi-column filtering and grouping. PostgreSQL can scan only rows matching the station/pollutant combination without accessing the raw \texttt{AirQualityReading} table (which could contain millions of rows).
+  \item Using \texttt{AirQualityDailyStats} instead of raw readings reduces query scope by approximately 35$\times$ (e.g., 85,000 raw readings → 2,400 daily aggregates over 1 year), yielding sub-100ms latencies for month-level rollups.
+\end{itemize}
+
+---
+
+\paragraph{Query 3: Active User Alerts and Trigger Patterns (Monitoring)}
+
+\textbf{Purpose:} Analyze alert trigger patterns by counting how many times user-configured pollution thresholds were exceeded in the last 7 days. This helps administrators understand alert system usage and identify frequently triggered pollutants.
+
+\textbf{Query Pattern:}
+\begin{verbatim}
+SELECT u.name AS user_name, p.name AS pollutant_name,
+       COUNT(*) AS trigger_count,
+       MIN(aqr.datetime) AS first_triggered_at,
+       MAX(aqr.datetime) AS last_triggered_at
+FROM Alert a
+JOIN AppUser u ON a.user_id = u.id
+JOIN Station s ON a.station_id = s.id
+JOIN Pollutant p ON a.pollutant_id = p.id
+JOIN AirQualityReading aqr
+  ON aqr.station_id = a.station_id
+ AND aqr.pollutant_id = a.pollutant_id
+ AND aqr.aqi >= a.threshold_aqi
+ AND aqr.datetime >= NOW() - INTERVAL '7 days'
+WHERE a.is_active = TRUE
+GROUP BY u.name, p.name
+ORDER BY trigger_count DESC;
+\end{verbatim}
+
+\textbf{Filtering patterns:}
+\begin{itemize}
+  \item \texttt{Alert} filtered by \texttt{is\_active = TRUE}
+  \item \texttt{AirQualityReading} filtered by date range (last 7 days) and joined on (station\_id, pollutant\_id, aqi >= threshold)
+  \item Aggregation grouped by user and pollutant with count and extrema
+\end{itemize}
+
+\textbf{Recommended indexes:}
+\begin{verbatim}
+-- Primary: partition recent readings for time-window filter
+CREATE INDEX idx_reading_recent_7days
+ON AirQualityReading (datetime)
+WHERE datetime >= NOW() - INTERVAL '7 days';
+
+-- Secondary: support alert joins
+CREATE INDEX idx_alert_is_active_station_pollutant
+ON Alert (is_active, station_id, pollutant_id);
+
+-- Tertiary: avoid sequential scan on readings for 7-day window
+CREATE INDEX idx_reading_station_pollutant_datetime
+ON AirQualityReading (station_id, pollutant_id, datetime DESC);
+\end{verbatim}
+
+\textbf{Index benefit analysis:}
+\begin{itemize}
+  \item \texttt{idx\_reading\_recent\_7days}: Partial index on recent data (last 7 days) dramatically reduces the scan size. PostgreSQL prunes partitions or skips rows older than 7 days without examining them.
+  \item \texttt{idx\_alert\_is\_active\_station\_pollutant}: Speeds up the join against the \texttt{Alert} table by filtering on the \texttt{is\_active} predicate first, reducing the number of join candidates.
+  \item \texttt{idx\_reading\_station\_pollutant\_datetime}: Composite index aligns with the multi-column join predicates and datetime range, enabling efficient nested-loop or hash joins without full table scans.
+\end{itemize}
+
+---
+
+\paragraph{Query 4: Station Coverage and Data Completeness (System Monitoring)}
+
+\textbf{Purpose:} Validate geographic coverage and data completeness by counting stations, monitored pollutants, and total readings per city. This query supports operational monitoring and ensures data quality across all regions.
+
+\textbf{Query Pattern:}
+\begin{verbatim}
+SELECT s.city, s.country,
+       COUNT(DISTINCT s.id) AS station_count,
+       COUNT(DISTINCT aqr.pollutant_id) AS pollutant_types,
+       MAX(aqr.datetime) AS latest_reading,
+       COUNT(aqr.id) AS readings_last_24h
+FROM Station s
+LEFT JOIN AirQualityReading aqr
+  ON s.id = aqr.station_id
+ AND aqr.datetime >= NOW() - INTERVAL '24 hours'
+GROUP BY s.city, s.country
+ORDER BY s.country, s.city, readings_last_24h DESC;
+\end{verbatim}
+
+\textbf{Filtering patterns:}
+\begin{itemize}
+  \item \texttt{Station} grouped by city and country
+  \item \texttt{AirQualityReading} filtered by datetime (last 24 hours) with distinct counts on station and pollutant
+\end{itemize}
+
+\textbf{Recommended index:}
+\begin{verbatim}
+-- Primary: support 24-hour window filter
+CREATE INDEX idx_reading_datetime_24h
+ON AirQualityReading (datetime)
+WHERE datetime >= NOW() - INTERVAL '24 hours';
+
+-- Secondary: ensure foreign key lookups are fast
+CREATE INDEX idx_station_city_country
+ON Station (city, country, id);
+\end{verbatim}
+
+\textbf{Index benefit analysis:}
+\begin{itemize}
+  \item \texttt{idx\_reading\_datetime\_24h}: Partial index on the last 24 hours of readings significantly reduces the join scope. The query only needs to examine recent data, not the entire history.
+  \item Aggregations (COUNT DISTINCT, MAX) operate on the filtered result set rather than the full table, keeping execution time sub-second for typical deployments.
+\end{itemize}
+
+---
+
+\paragraph{Query 5: User Recommendation History (User Engagement)}
+
+\textbf{Purpose:} Retrieve personalized recommendation history for a given user, including health guidance messages and suggested protective products. This query supports user engagement analysis and recommendation engine optimization.
+
+\textbf{Query Pattern:}
+\begin{verbatim}
+SELECT u.name AS user_name,
+       r.location, r.pollution_level, r.suggestion,
+       r.created_at,
+       COUNT(pr.id) AS product_recommendations_count
+FROM Recommendation r
+JOIN AppUser u ON r.user_id = u.id
+LEFT JOIN ProductRecommendation pr
+  ON r.id = pr.recommendation_id
+WHERE r.created_at >= NOW() - INTERVAL '30 days'
+GROUP BY u.name, r.location, r.pollution_level,
+         r.suggestion, r.created_at
+ORDER BY r.created_at DESC, product_recommendations_count DESC;
+\end{verbatim}
+
+\textbf{Filtering patterns:}
+\begin{itemize}
+  \item \texttt{Recommendation} filtered by date range (last 30 days)
+  \item Grouped by recommendation attributes (location, pollution level, suggestion) with count of associated products
+\end{itemize}
+
+\textbf{Recommended indexes:}
+\begin{verbatim}
+-- Primary: support 30-day time-window filter and grouping
+CREATE INDEX idx_recommendation_user_created_at
+ON Recommendation (user_id, created_at DESC);
+
+-- Secondary: accelerate product recommendation join
+CREATE INDEX idx_product_rec_recommendation_id
+ON ProductRecommendation (recommendation_id);
+\end{verbatim}
+
+\textbf{Index benefit analysis:}
+\begin{itemize}
+  \item \texttt{idx\_recommendation\_user\_created\_at}: Composite index on user and creation timestamp enables fast filtering by both user identity and date range. The descending sort on \texttt{created\_at} aligns with the \texttt{ORDER BY} clause, potentially eliminating a separate sort step.
+  \item \texttt{idx\_product\_rec\_recommendation\_id}: Supports efficient left joins to product recommendations without sequential scans.
+\end{itemize}
+
+---
+
+\subsubsection{Query Optimization Techniques Beyond Indexing}
+
+Beyond composite B-tree indexes on individual queries, the platform employs additional optimization strategies:
+
+\begin{itemize}
+  \item \textbf{Materialized Views for Aggregations:} The \texttt{AirQualityDailyStats} table (Query 2) pre-computes daily statistics, avoiding expensive rollups on raw data. This is particularly effective for historical and analytical queries where freshness requirements are measured in hours, not minutes.
+  
+  \item \textbf{Partial Indexes for Time-Windows:} Queries 3, 4, and 5 use partial indexes (e.g., \texttt{WHERE datetime >= NOW() - INTERVAL '7 days'}) to focus index coverage on hot data. This reduces index size, improves cache locality, and accelerates queries on recent data without maintaining massive indexes on cold data.
+  
+  \item \textbf{Temporal Partitioning for Large Tables:} The \texttt{AirQualityReading} table is partitioned monthly, allowing PostgreSQL's constraint exclusion mechanism to prune entire partitions during time-window queries. This is transparent to the application and dramatically reduces scan costs as the dataset grows.
+  
+  \item \textbf{Covering Indexes:} Some composite indexes (e.g., \texttt{idx\_reading\_station\_datetime}) include all columns needed by a query, allowing PostgreSQL to satisfy the query entirely from the index without accessing the underlying table (``Index Only Scan'' in \texttt{EXPLAIN} output).
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Concurrency Analysis}
+\label{subsec:method_concurrency}
+
+The system balances periodic writes with read-heavy analytical workloads:
+\begin{itemize}
+  \item Short ingestion transactions and index-aligned queries reduce lock durations under MVCC.
+  \item Temporal partitioning isolates writes on recent partitions from historical scans.
+  \item Maintenance (VACUUM, ANALYZE, materialized view refresh) should be scheduled during low-traffic windows.
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{API Layer and Services}
+\label{subsec:method_api}
+
+The baseline exposes REST endpoints supporting pagination and time-window filters for stations, readings, and aggregates. Authentication/authorization and rate limiting are considered production enhancements.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Recommendation Engine}
+\label{subsec:method_recommendation}
+
+The recommendation subsystem is rule-based. Rules map recent AQI/pollutant thresholds and user preferences (e.g., activity level) to deterministic messages. Rules can be implemented in SQL or application logic and should include identifiers for explainability.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Performance Validation and Experiments}
+\label{subsec:method_performance}
+
+The validation plan includes: ingesting historical data to observe throughput and storage growth; capturing \texttt{EXPLAIN ANALYZE} for representative queries; and optionally running JMeter scenarios to simulate concurrent dashboards. Empirical results are planned for future iterations; no production-scale benchmarks are claimed in this deliverable.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Summary of Methodology}
+\label{sec:method_summary}
+
+This chapter presented the Delivery 3 database design methodology, centered on a hybrid relational-NoSQL architecture:
+
+\textbf{Relational Layer (PostgreSQL):} A normalized, 3NF schema (Section~\ref{subsec:method_dbdesign}) for operational and analytical air quality data:
+\begin{itemize}
+  \item Conceptual modeling identifies 8 core entities (Station, Pollutant, Provider, AirQualityReading, AppUser, Alert, Recommendation, ProductRecommendation)
+  \item Logical modeling decomposes unnormalized data through 1NF, 2NF, and 3NF transformations, eliminating redundancy and anomalies
+  \item Physical implementation adds temporal partitioning, composite indexes, and a pre-aggregated \texttt{AirQualityDailyStats} table for analytical performance
+\end{itemize}
+
+\textbf{Query Optimization (Section~\ref{subsec:method_indexing}):} Five core production queries are optimized through dedicated indexing strategies:
+\begin{itemize}
+  \item Q1 (Latest readings): composite index \texttt{(station\_id, datetime DESC)} for dashboard queries
+  \item Q2 (Historical aggregates): materialized view \texttt{AirQualityDailyStats} with 35$\times$ scan reduction
+  \item Q3 (Alert patterns): partial index on recent 7-day window
+  \item Q4 (Coverage validation): partial index on recent 24-hour window
+  \item Q5 (Recommendations): user-based filtering with date-range optimization
+\end{itemize}
+
+\textbf{NoSQL Layer (MongoDB/Cosmos DB):} A lightweight document store (Section~\ref{subsec:method_nosql}) for semi-structured user configuration:
+\begin{itemize}
+  \item \texttt{user\_preferences} collection: theme, language, notification channels, favorite stations/pollutants
+  \item \texttt{dashboard\_configs} collection: personalized dashboard layouts with nested widget specifications
+  \item Separation of concerns: relational schema remains focused on operational data; NoSQL handles rapidly evolving customizations
+\end{itemize}
+
+\textbf{Key Design Principles:}
+\begin{itemize}
+  \item \textbf{Normalization to 3NF:} Eliminates redundancy, insertion/update/deletion anomalies, and supports data integrity
+  \item \textbf{Query-driven indexing:} Each index justified by specific production query patterns
+  \item \textbf{Controlled denormalization:} \texttt{AirQualityDailyStats} trades 3NF for 35$\times$ analytical performance gain
+  \item \textbf{Hybrid architecture:} Relational database for structured, long-lived entities; NoSQL for flexible, rapidly-evolving user data
+  \item \textbf{Scalability foundation:} Temporal partitioning, partial indexes, and document sharding enable horizontal scaling
+\end{itemize}
+
+The experimental validation of these design decisions is presented in Chapter~\ref{ch:results}. Future work includes object storage for raw payloads, TimescaleDB advanced features, GraphQL support, and production-grade high-availability and disaster-recovery capabilities.
