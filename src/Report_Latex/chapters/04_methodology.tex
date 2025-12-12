@@ -790,12 +790,306 @@ Beyond composite B-tree indexes on individual queries, the platform employs addi
 \subsection{Concurrency Analysis}
 \label{subsec:method_concurrency}
 
-The system balances periodic writes with read-heavy analytical workloads:
+A real-time air quality monitoring platform must handle simultaneous data ingestion, analytical queries, and user dashboard interactions without performance degradation or data corruption. This section identifies the primary concurrency scenarios for the Bogotá deployment, analyzes the risks they pose, and specifies mitigation strategies aligned to PostgreSQL's concurrency model.
+
+\subsubsection{Baseline Deployment Parameters (Bogotá)}
+
+Before analyzing concurrency, we establish realistic estimates for the Bogotá deployment:
+
 \begin{itemize}
-  \item Short ingestion transactions and index-aligned queries reduce lock durations under MVCC.
-  \item Temporal partitioning isolates writes on recent partitions from historical scans.
-  \item Maintenance (VACUUM, ANALYZE, materialized view refresh) should be scheduled during low-traffic windows.
+    \item \textbf{Monitoring stations:} 6 stations (Usaquén, Chapinero, Santa Fe, Puente Aranda, Kennedy, Suba)
+    \item \textbf{Pollutants:} 6 types (PM$_{2.5}$, PM$_{10}$, NO$_2$, O$_3$, SO$_2$, CO)
+    \item \textbf{Ingestion frequency:} 10-minute polling cycle from external APIs
+    \item \textbf{Readings per cycle:} 6 stations $\times$ 6 pollutants = 36 readings/10 minutes
+    \item \textbf{Expected users:}
+    \begin{itemize}
+      \item Peak hours (7--9 AM, 12--2 PM): 50--100 concurrent dashboard users
+      \item Off-peak hours: 10--20 concurrent users
+      \item Night hours (midnight--6 AM): 2--5 concurrent users (researchers, administrators)
+    \end{itemize}
+    \item \textbf{Expected query patterns:}
+    \begin{itemize}
+      \item Dashboard loads: 20 requests/minute during peak (Q1, latest readings)
+      \item Historical trend queries: 5 requests/minute (Q2, monthly aggregates)
+      \item Alert monitoring: 2 queries/minute (Q3)
+      \item System health checks: 1 query/minute (Q4, coverage validation)
+      \item User engagement queries: 10 requests/minute (Q5, recommendations)
+    \end{itemize}
 \end{itemize}
+
+\textbf{Total Estimated Workload:}
+\begin{verbatim}
+Ingestion writes:   36 rows / 10 min = 3.6 rows/sec
+API reads:          (20 + 5 + 2 + 1 + 10) = 38 queries/min = 0.63 queries/sec
+Peak concurrency:   100 users (dashboard + analytical queries)
+\end{verbatim}
+
+---
+
+\subsubsection{Primary Concurrency Scenarios}
+
+\paragraph{Scenario 1: Ingestion vs. Dashboard Queries (High Contention Risk)}
+
+\textbf{Description:} Every 10 minutes, the Ingestion Job writes 36 new readings to \texttt{AirQualityReading}, while simultaneously 50--100 users load dashboards executing Query 1 (latest readings). Both operations access the same table and potentially the same indexes.
+
+\textbf{Conflict Points:}
+\begin{itemize}
+    \item \textbf{Index contention:} Ingestion inserts rows → updates composite index \texttt{idx\_reading\_station\_datetime}. Dashboard queries scan the same index. High write-read contention on index pages.
+    
+    \item \textbf{Buffer cache:} Both operations compete for PostgreSQL's shared buffer pool. Ingestion writes cause page dirtiness; dashboard reads may stall waiting for I/O to flush pages.
+    
+    \item \textbf{Lock duration:} INSERT operations require row-level locks (brief, sub-millisecond) under PostgreSQL's MVCC. However, index updates can hold page-level locks longer if B-tree nodes require rebalancing.
+    
+    \item \textbf{Visibility overhead:} MVCC requires maintaining visibility snapshots. High write frequency increases the number of transaction IDs (XIDs), potentially exhausting the XID space (2 billion transactions).
+\end{itemize}
+
+\textbf{Risk Assessment:} **MEDIUM**
+\begin{itemize}
+    \item Modern PostgreSQL (12+) handles sub-second write bursts well
+    \item MVCC isolates reads from writes, avoiding blocking
+    \item However, at 100 concurrent users + regular ingestion, resource contention is noticeable
+\end{itemize}
+
+---
+
+\paragraph{Scenario 2: Concurrent Dashboard Queries (Moderate Contention)}
+
+\textbf{Description:} 50--100 users simultaneously refresh dashboards, each executing Query 1 (latest readings). These are read-only queries, but they compete for:
+\begin{itemize}
+    \item CPU cycles (sorting by ROW\_NUMBER, joining with Station and Pollutant tables)
+    \item Buffer cache pages (reading index pages and table data)
+    \item Network bandwidth (returning results to 100 clients)
+\end{itemize}
+
+\textbf{Conflict Points:}
+\begin{itemize}
+    \item \textbf{CPU saturation:} Query 1's window function (ROW\_NUMBER) requires per-station sorting. At 100 concurrent queries, CPU utilization approaches 70--80\% on a 4-vCPU instance.
+    
+    \item \textbf{Buffer cache thrashing:} If working set (indexes + frequently accessed tables) exceeds shared buffer pool, queries trigger repeated disk I/O, slowing all concurrent queries.
+    
+    \item \textbf{Lock wait chains:} Although read-only queries don't acquire write locks, they compete for buffer manager locks and buffer pins, causing brief wait chains.
+\end{itemize}
+
+\textbf{Risk Assessment:} **LOW-MEDIUM** (mitigated by indexing)
+\begin{itemize}
+    \item Query 1 with \texttt{idx\_reading\_station\_datetime} index executes in < 50 ms, finishing before significant lock contention
+    \item At 100 concurrent queries, total query throughput = 100 / 0.050 = 2000 queries/sec, easily within PostgreSQL's capacity
+    \item Main bottleneck is network I/O to 100 clients, not the database
+\end{itemize}
+
+---
+
+\paragraph{Scenario 3: Batch Jobs (Aggregation, Maintenance) Concurrent with User Queries}
+
+\textbf{Description:} The Daily Aggregation Job runs at 2:00 UTC (off-peak for Bogotá, during night hours). However, if delayed or if maintenance jobs (VACUUM, ANALYZE, materialized view refresh) run during business hours, they can conflict with user queries.
+
+\textbf{Conflict Points:}
+\begin{itemize}
+    \item \textbf{Full-table scan for aggregation:} The aggregation job scans all historical readings in \texttt{AirQualityReading}, potentially causing:
+    \begin{itemize}
+      \item Buffer cache eviction: Scanning millions of rows pushes out pages used by concurrent dashboards
+      \item I/O spike: Full scan triggers sequential I/O, competing with random I/O from dashboard queries
+    \end{itemize}
+    
+    \item \textbf{VACUUM and ANALYZE overhead:} Maintenance queries acquire ShareUpdateExclusiveLock on tables, blocking concurrent writes but allowing reads. If run during business hours, ingestion writes must wait.
+    
+    \item \textbf{Lock conflicts:} If an aggregation job holds an exclusive lock and a user query arrives, the query waits, increasing p99 latency.
+\end{itemize}
+
+\textbf{Risk Assessment:} **MEDIUM** (mitigated by scheduling)
+\begin{itemize}
+    \item Off-peak scheduling (2:00 UTC = 8 PM Bogotá time) avoids peak traffic
+    \item If maintenance must run during day, short duration (< 5 min) minimizes impact
+\end{itemize}
+
+---
+
+\paragraph{Scenario 4: Hot Data (Recent Partitions) Under Concurrent Load}
+
+\textbf{Description:} Recent data (last 24 hours) experiences high read and write frequency. Queries 1, 3, and 4 all filter by recent timestamps, accessing the same partitions. Ingestion writes to the most recent partition every 10 minutes.
+
+\textbf{Conflict Points:}
+\begin{itemize}
+    \item \textbf{Partition lock contention:} PostgreSQL's declarative partitioning uses table-level locks. If partition constraints are enforced, multiple inserts to the same partition serialize at the partition level.
+    
+    \item \textbf{Index page splits:} Inserting into a time-ordered index (sorted by datetime DESC) causes B-tree leaf page splits, which temporarily acquire exclusive locks.
+    
+    \item \textbf{Cache locality:} Hot data (recent readings) stays in buffer cache, but rapid writes cause frequent dirty-clean cycles, creating I/O bursts.
+\end{itemize}
+
+\textbf{Risk Assessment:} **MEDIUM-HIGH** (partial mitigation with partitioning)
+\begin{itemize}
+    \item Temporal partitioning by month reduces lock scope (each partition is a separate heap and index)
+    \item However, within a single month partition, concurrent writes still contend for B-tree pages
+    \item Solution: Consider further partitioning by day or hour for high-write-frequency tables (future enhancement)
+\end{itemize}
+
+---
+
+\subsubsection{Mitigation Strategies}
+
+\paragraph{Strategy 1: MVCC and Row-Level Locking}
+
+\textbf{Implementation:} PostgreSQL's default isolation level is \texttt{READ COMMITTED}, which uses Multi-Version Concurrency Control (MVCC).
+
+\textbf{Benefits:}
+\begin{itemize}
+    \item \textbf{Readers do not block writers:} Concurrent SELECT queries reading while INSERT/UPDATE transactions commit. Readers see snapshot consistent with their transaction start time.
+    \item \textbf{Row-level locks:} UPDATEs and DELETEs acquire row-level locks, not table-level. Multiple transactions can update different rows simultaneously.
+    \item \textbf{No phantom reads (at READ COMMITTED):} Sufficient for our use case; SERIALIZABLE isolation (stronger but slower) not required.
+\end{itemize}
+
+\textbf{Configuration:}
+\begin{verbatim}
+-- Default in PostgreSQL 12+
+ALTER SYSTEM SET default_transaction_isolation = 'read committed';
+SELECT pg_reload_conf();
+\end{verbatim}
+
+---
+
+\paragraph{Strategy 2: Temporal Partitioning}
+
+\textbf{Implementation:} \texttt{AirQualityReading} is partitioned by month on the \texttt{datetime} column.
+
+\textbf{Benefits for Concurrency:}
+\begin{itemize}
+    \item \textbf{Partition pruning:} Queries filtering by recent timestamps (e.g., Query 1 ``last 24 hours'') only scan the current partition, not historical data.
+    \item \textbf{Reduced lock scope:} Each partition has independent B-tree index pages. Ingestion to the current partition doesn't lock past partitions.
+    \item \textbf{Parallel maintenance:} VACUUM and ANALYZE can target individual partitions, reducing blocking time.
+    \item \textbf{Lock isolation:} Index page splits in the current month partition don't affect queries on 6-month-old data.
+\end{itemize}
+
+\textbf{Partitioning Scheme:}
+\begin{verbatim}
+-- Create monthly partitions (example for 2025)
+CREATE TABLE air_quality_reading_2025_01 
+PARTITION OF AirQualityReading 
+FOR VALUES FROM ('2025-01-01') TO ('2025-02-01');
+
+CREATE TABLE air_quality_reading_2025_02 
+PARTITION OF AirQualityReading 
+FOR VALUES FROM ('2025-02-01') TO ('2025-03-01');
+-- ... repeat for all months
+\end{verbatim}
+
+---
+
+\paragraph{Strategy 3: Partial Indexes on Hot Data}
+
+\textbf{Implementation:} Queries 3, 4, and 5 use partial indexes focused on recent data (7 days, 24 hours).
+
+\textbf{Benefits:}
+\begin{itemize}
+    \item \textbf{Smaller index size:} Partial indexes reduce total index footprint, improving cache locality and reducing page faults.
+    \item \textbf{Faster writes:} Ingestion only updates partial indexes for recent data, not massive historical indexes.
+    \item \textbf{Query optimization:} PostgreSQL can quickly identify which partial indexes apply to a query, reducing planner overhead.
+\end{itemize}
+
+\textbf{Example:}
+\begin{verbatim}
+-- Only index last 7 days (alert monitoring)
+CREATE INDEX idx_reading_recent_7days 
+ON AirQualityReading (datetime) 
+WHERE datetime >= NOW() - INTERVAL '7 days';
+
+-- Only index last 24 hours (coverage validation)
+CREATE INDEX idx_reading_recent_24h 
+ON AirQualityReading (datetime) 
+WHERE datetime >= NOW() - INTERVAL '24 hours';
+\end{verbatim}
+
+---
+
+\paragraph{Strategy 4: Connection Pooling}
+
+\textbf{Implementation:} Use PgBouncer or Pgpool-II between the application and PostgreSQL.
+
+\textbf{Benefits:}
+\begin{itemize}
+    \item \textbf{Limit concurrent connections:} At 100 concurrent users, PgBouncer maintains a pool of 20--30 database connections (connection multiplexing), reducing PostgreSQL backend overhead.
+    \item \textbf{Transaction queuing:} Excess transactions queue at the pool rather than at PostgreSQL, preventing database resource exhaustion.
+    \item \textbf{Idle connection cleanup:} Long-idle connections are recycled, freeing memory.
+\end{itemize}
+
+\textbf{Configuration (PgBouncer):}
+\begin{verbatim}
+# pgbouncer.ini
+[databases]
+air_quality_db = host=localhost port=5432 dbname=air_quality
+
+[pgbouncer]
+pool_mode = transaction  # Pool at transaction boundaries
+max_client_conn = 1000   # Max clients to pool
+default_pool_size = 20   # Connections to backend
+min_pool_size = 5
+\end{verbatim}
+
+---
+
+\paragraph{Strategy 5: Query Caching}
+
+\textbf{Implementation:} Cache frequently accessed queries (Q1, dashboard latest readings) for 5--10 minutes.
+
+\textbf{Benefits:}
+\begin{itemize}
+    \item \textbf{Reduced database load:} At 20 dashboard loads/minute, caching eliminates 190 queries/minute (assuming 10-minute cache TTL).
+    \item \textbf{Lower latency:} Cache hits return results in < 10 ms; database queries take 50--200 ms.
+    \item \textbf{Reduced contention:} Fewer concurrent queries on the database.
+\end{itemize}
+
+\textbf{Implementation:}
+\begin{verbatim}
+-- Option 1: Redis cache at application layer
+-- Pseudocode (Python with Flask-Caching)
+@cache.cached(timeout=300)  # 5 minutes
+def get_latest_readings(city):
+    return db.query(Q1).filter(city=city).all()
+
+-- Option 2: Materialized view with automatic refresh
+-- (Already implemented for AirQualityDailyStats)
+\end{verbatim}
+
+---
+
+\paragraph{Strategy 6: Scheduled Maintenance During Off-Peak Hours}
+
+\textbf{Implementation:} Schedule resource-intensive operations outside peak hours.
+
+\textbf{Schedule:}
+\begin{itemize}
+    \item \textbf{2:00 UTC (8 PM Bogotá):} Daily Aggregation Job (computes AirQualityDailyStats)
+    \item \textbf{3:00 UTC (9 PM Bogotá):} VACUUM ANALYZE on AirQualityReading (full-table statistics)
+    \item \textbf{4:00 UTC (10 PM Bogotá):} Materialized view refresh (if using continuous aggregates)
+    \item \textbf{Sunday 5:00 UTC (Midnight Bogotá):} Full backup, reindex (weekly)
+\end{itemize}
+
+\textbf{Benefits:}
+\begin{itemize}
+    \item Off-peak hours have 2--5 concurrent users; database resources are available for maintenance
+    \item Operations complete before peak hours (6--9 AM)
+    \item Statistics are fresh for morning's peak queries
+\end{itemize}
+
+---
+
+\subsubsection{Concurrency Scenario Summary Table}
+
+\begin{table}[htbp]
+\centering
+\caption{Concurrency scenarios, risks, and mitigation strategies for Bogotá deployment.}
+\label{tab:concurrency_scenarios}
+\begin{tabular}{lllll}
+\toprule
+\textbf{Scenario} & \textbf{Frequency} & \textbf{Risk Level} & \textbf{Primary Risk} & \textbf{Mitigation} \\
+\midrule
+1. Ingestion vs. Dashboard & Every 10 min & MEDIUM & Index contention & MVCC, partitioning, connection pool \\
+2. Concurrent Dashboard Queries & Peak hours & LOW & CPU saturation & Query caching, indexes \\
+3. Batch Jobs vs. User Queries & Daily 2 UTC & MEDIUM & Lock blocking & Off-peak scheduling \\
+4. Hot Data Contention & Continuous & MEDIUM-HIGH & Partition lock, page splits & Temporal partitioning, partial indexes \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsection{API Layer and Services}
