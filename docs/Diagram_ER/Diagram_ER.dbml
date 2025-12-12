@@ -1,6 +1,6 @@
 //// GEOSPATIAL & MONITORING (Operational)
 
-Table Station {
+Table Station {a
   id int [pk]
   name varchar [not null]
   latitude float [not null]

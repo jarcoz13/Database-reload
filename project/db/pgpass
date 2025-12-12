@@ -1,0 +1,2 @@
+postgres:5432:airquality_db:airquality_user:airquality_pass
+postgres:5432:*:airquality_user:airquality_pass

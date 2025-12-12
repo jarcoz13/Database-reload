@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Air Quality PostgreSQL",
+      "Group": "Development",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "airquality_db",
+      "Username": "airquality_user",
+      "SSLMode": "prefer",
+      "PassFile": "/tmp/pgpassfile"
+    }
+  }
+}

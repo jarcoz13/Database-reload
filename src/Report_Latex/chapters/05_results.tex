@@ -249,9 +249,10 @@ Hash bucket stats: density 1.00, collisions 0
 
 \begin{table}[htbp]
 \centering
+\tiny
 \caption{Query performance analysis on current dataset ($\sim$85,000 air quality readings, 6 stations, 6 pollutants). Execution times are expected based on index configuration and dataset size, validated through \texttt{EXPLAIN ANALYZE}.}
 \label{tab:query_performance}
-\begin{tabular}{lrrrc}
+\begin{tabular}{@{}p{2.5cm}p{1.5cm}p{1.5cm}p{3cm}p{2cm}@{}}
 \toprule
 \textbf{Query} & \textbf{Expected Time (ms)} & \textbf{Rows} & \textbf{Primary Index} & \textbf{Access Method} \\
 \midrule
@@ -385,16 +386,17 @@ This section presents the expected performance gains from temporal partitioning 
 
 \begin{table}[htbp]
 \centering
+\footnotesize
 \caption{Performance comparison: monolithic table vs. monthly-partitioned table. Execution times measured using \texttt{EXPLAIN ANALYZE} on $\sim$85,000 air quality readings. Baseline: Oct 2024 data (1 month); Partitioned: 36 monthly partitions (Jan 2022--Dec 2024). All measurements represent best-case after cache warmup (5 sequential runs averaged).}
 \label{tab:partitioning_results}
-\begin{tabular}{lrrrr}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lrrrr}
 \toprule
 \textbf{Query} & \textbf{Baseline (ms)} & \textbf{Partitioned (ms)} & \textbf{Improvement (\%)} & \textbf{Partitions Pruned} \\
 \midrule
 Q1: Latest readings & 48.2 & 42.7 & 11.4 & 35/36 \\
 Q2: Monthly averages (3-year) & 182.5 & 127.3 & 30.2 & 24/36 \\
 \bottomrule
-\end{tabular}
+\end{tabular*}
 \end{table}
 
 \textbf{Detailed Analysis:}

@@ -1,0 +1,171 @@
+services:
+  # PostgreSQL Database (with PostGIS for geospatial data)
+  postgres:
+    image: postgis/postgis:15-3.3
+    container_name: airquality_postgres
+    environment:
+      POSTGRES_DB: airquality_db
+      POSTGRES_USER: airquality_user
+      POSTGRES_PASSWORD: airquality_pass
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../docs/Diagram_ER/init_database.sql:/docker-entrypoint-initdb.d/01_init_schema.sql:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - airquality_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airquality_user -d airquality_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    container_name: airquality_mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin_pass
+      MONGO_INITDB_DATABASE: airquality_logs
+    volumes:
+      - mongodb_data:/data/db
+      - ./db/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    ports:
+      - "27017:27017"
+    networks:
+      - airquality_network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI Backend (API Layer + Batch Jobs)
+  backend:
+    build:
+      context: ./back
+      dockerfile: Dockerfile
+    container_name: airquality_backend
+    environment:
+      # PostgreSQL Configuration
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: airquality_db
+      POSTGRES_USER: airquality_user
+      POSTGRES_PASSWORD: airquality_pass
+      
+      # MongoDB Configuration
+      MONGODB_HOST: mongodb
+      MONGODB_PORT: 27017
+      MONGODB_USER: admin
+      MONGODB_PASSWORD: admin_pass
+      MONGODB_DB: airquality_logs
+      
+      # API Configuration
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      DEBUG: "true"
+      SECRET_KEY: "change-this-in-production"
+      CORS_ORIGINS: "http://localhost:5173,http://localhost:3000"
+      
+      # Job Configuration
+      INGESTION_FREQUENCY_MINUTES: 30
+      AGGREGATION_HOUR: 2
+    volumes:
+      - ./back:/app
+      - backend_cache:/app/.cache
+    ports:
+      - "8000:8000"
+    networks:
+      - airquality_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    command: sh -c "python init_db.py && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+    restart: unless-stopped
+
+  # Vue.js Frontend
+  frontend:
+    build:
+      context: ./front
+      dockerfile: Dockerfile
+    container_name: airquality_frontend
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+      VITE_APP_TITLE: "Air Quality Monitor"
+    volumes:
+      - ./front:/app
+      - /app/node_modules
+      - frontend_cache:/app/.vite
+    ports:
+      - "5173:5173"
+    networks:
+      - airquality_network
+    depends_on:
+      - backend
+    command: npm run dev -- --host 0.0.0.0
+
+  # PgAdmin - PostgreSQL Management Tool (Optional)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: airquality_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@airquality.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./db/pgadmin-servers.json:/pgadmin4/servers.json:ro
+      - ./db/pgpass:/tmp/pgpassfile:ro
+    ports:
+      - "5050:80"
+    networks:
+      - airquality_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    user: root
+    entrypoint: >
+      /bin/sh -c "
+      chmod 600 /tmp/pgpassfile;
+      chown pgadmin:pgadmin /tmp/pgpassfile;
+      /entrypoint.sh
+      "
+
+  # Mongo Express - MongoDB Management Tool (Optional)
+  mongo-express:
+    image: mongo-express:latest
+    container_name: airquality_mongo_express
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: admin_pass
+      ME_CONFIG_MONGODB_URL: mongodb://admin:admin_pass@mongodb:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin
+    ports:
+      - "8081:8081"
+    networks:
+      - airquality_network
+    depends_on:
+      - mongodb
+
+networks:
+  airquality_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  mongodb_data:
+    driver: local
+  backend_cache:
+    driver: local
+  frontend_cache:
+    driver: local
+  pgadmin_data:
+    driver: local
