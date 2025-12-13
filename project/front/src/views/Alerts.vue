@@ -103,11 +103,9 @@
           <div class="form-group">
             <label>Notification Method</label>
             <select v-model="formData.notification_method">
-              <option value="in-app">In-App Notification</option>
-              <option value="email">Email</option>
-              <option value="sms">SMS</option>
-              <option value="all">All Methods</option>
+              <option value="telegram">Telegram 📱</option>
             </select>
+            <small class="help-text">ℹ️ Only Telegram notifications are enabled at this time. Email and SMS coming soon!</small>
           </div>
 
           <div v-if="formError" class="error-message">
@@ -151,7 +149,7 @@ export default {
       pollutant_id: '',
       threshold: '',
       trigger_condition: 'exceeds',
-      notification_method: 'in-app'
+      notification_method: 'telegram'
     })
 
     const loadAlerts = async () => {
@@ -357,6 +355,7 @@ export default {
 
     const formatNotificationMethod = (method) => {
       const methods = {
+        'telegram': 'Telegram 📱',
         'in-app': 'In-App',
         'email': 'Email',
         'sms': 'SMS',
@@ -667,6 +666,14 @@ export default {
 .form-group select:focus {
   outline: none;
   border-color: #4CAF50;
+}
+
+.form-group .help-text {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: #666;
+  font-style: italic;
 }
 
 .modal-footer {

@@ -50,6 +50,8 @@ class DataNormalizer:
         self.mongo_logs = get_error_logs_collection()
         self.pollutant_cache = {}
         self.station_cache = {}
+        self.station_coords_cache = []
+        self.db_session = None
     
     async def normalize_and_save(
         self, 
@@ -311,6 +313,9 @@ class DataNormalizer:
         
         stations = db.query(Station).all()
         self.station_cache = {(s.name, s.city): s.id for s in stations}
+        # También cachear por coordenadas para búsqueda por proximidad
+        self.station_coords_cache = [(s.id, s.latitude, s.longitude, s.name, s.city) for s in stations]
+        self.db_session = db
     
     def _get_pollutant_id(self, name: str) -> Optional[int]:
         """Get pollutant ID from cache"""
@@ -323,13 +328,21 @@ class DataNormalizer:
         latitude: float, 
         longitude: float
     ) -> Optional[int]:
-        """Get or create station"""
+        """Get or create station - busca por nombre o por proximidad de coordenadas"""
         cache_key = (name, city)
         if cache_key in self.station_cache:
             return self.station_cache[cache_key]
         
-        # Create new station (simplified, would need proper DB session)
-        return None  # In real implementation, create station
+        # Buscar por proximidad de coordenadas (±0.05 grados ~ 5km)
+        tolerance = 0.05
+        for station_id, lat, lon, st_name, st_city in self.station_coords_cache:
+            if (abs(lat - latitude) < tolerance and 
+                abs(lon - longitude) < tolerance):
+                logger.info(f"Matched coordinates ({latitude}, {longitude}) to station: {st_name} - {st_city}")
+                return station_id
+        
+        logger.warning(f"No station found for coordinates ({latitude}, {longitude}) near {city}")
+        return None
     
     def _convert_to_canonical_unit(
         self, 

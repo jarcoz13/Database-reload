@@ -104,14 +104,23 @@ class IngestionJob:
         if "aqicn" in provider_name or "waqi" in provider_name:
             data = self.mock_service.aqicn.get_all_stations()
         elif "google" in provider_name:
+            # Generar datos para todas las 5 estaciones
             data = [
-                self.mock_service.google.get_current_conditions(4.6097, -74.0817),
-                self.mock_service.google.get_current_conditions(6.2442, -75.5812),
+                self.mock_service.google.get_current_conditions(4.6097, -74.0817),   # Kennedy - Bogotá
+                self.mock_service.google.get_current_conditions(4.7110, -74.0721),   # Usaquén - Bogotá
+                self.mock_service.google.get_current_conditions(6.2442, -75.5812),   # Medellín Centro
+                self.mock_service.google.get_current_conditions(6.1650, -75.5847),   # Envigado - Medellín
+                self.mock_service.google.get_current_conditions(3.4516, -76.5320),   # Cali Centro
             ]
         elif "iqair" in provider_name or "airvisual" in provider_name:
+            # Generar datos para todas las estaciones
             data = [
                 self.mock_service.iqair.get_city_data("bogota"),
                 self.mock_service.iqair.get_city_data("medellin"),
+                self.mock_service.iqair.get_city_data("cali"),
+                # IQAir también puede usar coordenadas directamente
+                self.mock_service.iqair.get_nearest_station(4.7110, -74.0721),  # Usaquén
+                self.mock_service.iqair.get_nearest_station(6.1650, -75.5847),  # Envigado
             ]
         else:
             logger.warning(f"Unknown provider type: {provider.name}, using AQICN mock")

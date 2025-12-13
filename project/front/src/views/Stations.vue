@@ -19,36 +19,40 @@
     </div>
 
     <div v-else class="stations-container">
-      <div class="card" v-for="station in stations" :key="station.id">
+      <div class="station-card" v-for="station in stations" :key="station.id">
         <div class="station-header">
-          <h3>{{ station.name }}</h3>
+          <div class="station-title">
+            <h3>{{ station.name }}</h3>
+            <span class="location">{{ station.city }}, {{ station.country }}</span>
+          </div>
           <span class="status-badge" :class="{ active: station.is_active }">
             {{ station.is_active ? '● Active' : '○ Inactive' }}
           </span>
         </div>
         
-        <div class="station-info">
-          <p><strong>📍 Location:</strong> {{ station.city }}, {{ station.country }}</p>
-          <p><strong>🗺️ Coordinates:</strong> {{ station.latitude.toFixed(4) }}, {{ station.longitude.toFixed(4) }}</p>
-          <p><strong>🏢 Provider:</strong> {{ station.provider_name || 'Unknown' }}</p>
-        </div>
-
-        <div v-if="station.current_readings && station.current_readings.length > 0" class="readings">
-          <h4>Latest Readings:</h4>
-          <div class="readings-grid">
-            <div v-for="reading in station.current_readings" :key="reading.pollutant_name" 
-                 class="reading-item"
-                 :class="getAQIClass(reading.aqi)">
-              <div class="pollutant">{{ reading.pollutant_name }}</div>
-              <div class="value">{{ reading.value.toFixed(2) }} {{ reading.unit }}</div>
-              <div class="aqi" v-if="reading.aqi">AQI: {{ reading.aqi }}</div>
-              <div class="time">{{ formatTime(reading.timestamp) }}</div>
-            </div>
+        <div class="station-summary">
+          <div class="summary-item">
+            <span class="label">📍 Coordinates:</span>
+            <span class="value">{{ station.latitude.toFixed(4) }}, {{ station.longitude.toFixed(4) }}</span>
+          </div>
+          
+          <div class="summary-item" v-if="station.current_readings && station.current_readings.length > 0">
+            <span class="label">📊 Latest AQI:</span>
+            <span class="value aqi-badge" :class="getAQIClass(getLatestAQI(station))">
+              {{ getLatestAQI(station) }}
+            </span>
+          </div>
+          
+          <div class="summary-item" v-else>
+            <span class="label">📊 Status:</span>
+            <span class="value">No recent data</span>
           </div>
         </div>
-        
-        <div v-else class="no-readings">
-          No recent readings available
+
+        <div class="station-footer">
+          <button @click="viewStationDetails(station.id)" class="details-btn">
+            🔍 View Details & Map
+          </button>
         </div>
       </div>
     </div>
@@ -57,12 +61,14 @@
 
 <script>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 export default {
   name: 'Stations',
   setup() {
+    const router = useRouter()
     const stations = ref([])
     const loading = ref(false)
     const error = ref(null)
@@ -163,6 +169,19 @@ export default {
       return 'aqi-hazardous'
     }
 
+    const getLatestAQI = (station) => {
+      if (!station.current_readings || station.current_readings.length === 0) {
+        return 'N/A'
+      }
+      // Get the highest AQI from current readings
+      const maxAQI = Math.max(...station.current_readings.map(r => r.aqi || 0))
+      return maxAQI || 'N/A'
+    }
+
+    const viewStationDetails = (stationId) => {
+      router.push(`/stations/${stationId}`)
+    }
+
     onMounted(() => {
       loadData()
       // Auto-refresh every 2 minutes
@@ -176,7 +195,9 @@ export default {
       error,
       loadData,
       formatTime,
-      getAQIClass
+      getAQIClass,
+      getLatestAQI,
+      viewStationDetails
     }
   }
 }
@@ -236,37 +257,45 @@ export default {
 
 .stations-container {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
   gap: 1.5rem;
   margin-top: 1rem;
 }
 
-.card {
+.station-card {
   background: white;
-  border-radius: 8px;
+  border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
   padding: 1.5rem;
   transition: transform 0.2s, box-shadow 0.2s;
+  border: 1px solid #eee;
 }
 
-.card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+.station-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.15);
 }
 
 .station-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 2px solid #eee;
+  align-items: flex-start;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #f0f0f0;
 }
 
-.station-header h3 {
-  margin: 0;
+.station-title h3 {
+  margin: 0 0 0.5rem 0;
   color: #333;
-  font-size: 1.5rem;
+  font-size: 1.4rem;
+}
+
+.station-title .location {
+  display: block;
+  color: #666;
+  font-size: 0.9rem;
+  font-weight: normal;
 }
 
 .status-badge {
@@ -283,87 +312,88 @@ export default {
   color: #28a745;
 }
 
-.station-info {
-  margin-bottom: 1rem;
+.station-summary {
+  margin-bottom: 1.5rem;
 }
 
-.station-info p {
-  margin: 0.5rem 0;
-  color: #555;
-  font-size: 0.95rem;
+.summary-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #f5f5f5;
 }
 
-.readings h4 {
-  margin: 1rem 0 0.75rem 0;
-  color: #333;
-  font-size: 1.1rem;
+.summary-item:last-child {
+  border-bottom: none;
 }
 
-.readings-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 0.75rem;
-}
-
-.reading-item {
-  background: #f8f9fa;
-  padding: 0.75rem;
-  border-radius: 6px;
-  border-left: 4px solid #ddd;
-  transition: transform 0.2s;
-}
-
-.reading-item:hover {
-  transform: scale(1.05);
-}
-
-.reading-item.aqi-good {
-  border-left-color: #00e400;
-  background: #f0fff0;
-}
-
-.reading-item.aqi-moderate {
-  border-left-color: #ffff00;
-  background: #fffef0;
-}
-
-.reading-item.aqi-unhealthy-sensitive {
-  border-left-color: #ff7e00;
-  background: #fff8f0;
-}
-
-.reading-item.aqi-unhealthy {
-  border-left-color: #ff0000;
-  background: #fff0f0;
-}
-
-.reading-item.aqi-very-unhealthy {
-  border-left-color: #8f3f97;
-  background: #f8f0f8;
-}
-
-.reading-item.aqi-hazardous {
-  border-left-color: #7e0023;
-  background: #f5f0f0;
-}
-
-.pollutant {
-  font-weight: bold;
-  color: #333;
-  margin-bottom: 0.25rem;
-  font-size: 0.9rem;
-}
-
-.value {
-  font-size: 1.2rem;
-  color: #555;
-  margin: 0.25rem 0;
-}
-
-.aqi {
-  font-size: 0.85rem;
+.summary-item .label {
   color: #666;
+  font-size: 0.95rem;
   font-weight: 500;
+}
+
+.summary-item .value {
+  color: #333;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.aqi-badge {
+  padding: 0.35rem 0.85rem;
+  border-radius: 16px;
+  font-size: 0.95rem;
+  font-weight: bold;
+  color: white;
+}
+
+.aqi-badge.aqi-good {
+  background: #00e400;
+}
+
+.aqi-badge.aqi-moderate {
+  background: #ffdd00;
+  color: #333;
+}
+
+.aqi-badge.aqi-unhealthy-sensitive {
+  background: #ff7e00;
+}
+
+.aqi-badge.aqi-unhealthy {
+  background: #ff0000;
+}
+
+.aqi-badge.aqi-very-unhealthy {
+  background: #8f3f97;
+}
+
+.aqi-badge.aqi-hazardous {
+  background: #7e0023;
+}
+
+.station-footer {
+  margin-top: 1rem;
+  text-align: center;
+}
+
+.details-btn {
+  width: 100%;
+  padding: 0.85rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 600;
+  transition: all 0.3s;
+}
+
+.details-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }
 
 .time {

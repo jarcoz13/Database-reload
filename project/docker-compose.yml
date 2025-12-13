@@ -74,6 +74,10 @@ services:
       # Job Configuration
       INGESTION_FREQUENCY_MINUTES: 30
       AGGREGATION_HOUR: 2
+      
+      # Telegram Bot Configuration
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-YOUR_BOT_TOKEN_HERE}"
+      TELEGRAM_CHAT_ID: "-1003668631559"
     volumes:
       - ./back:/app
       - backend_cache:/app/.cache

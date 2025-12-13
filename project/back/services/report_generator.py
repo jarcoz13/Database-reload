@@ -4,6 +4,7 @@ Generates PDF reports with charts using WeasyPrint and matplotlib
 """
 
 import os
+import logging
 from datetime import datetime, date
 from typing import Optional, List, Dict
 import io
@@ -21,6 +22,9 @@ from models import (
     AirQualityReading, Station, Pollutant, 
     AirQualityDailyStats, Report
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class ReportGenerator:
@@ -57,6 +61,9 @@ class ReportGenerator:
         # Generate charts
         charts = self._generate_charts(data, report)
         
+        logger.info(f"Statistics before HTML generation: {data['statistics']}")
+        logger.info(f"Charts generated: {list(charts.keys())}")
+        
         # Generate HTML content
         html_content = self._generate_html(report, data, charts)
         
@@ -84,10 +91,15 @@ class ReportGenerator:
     ) -> Dict:
         """Fetch data for the report"""
         
+        # Convert dates to datetime to include full day range
+        from datetime import datetime as dt
+        start_datetime = dt.combine(start_date, dt.min.time())
+        end_datetime = dt.combine(end_date, dt.max.time())
+        
         # Base query for readings
         query = self.db.query(AirQualityReading).filter(
-            AirQualityReading.datetime >= start_date,
-            AirQualityReading.datetime <= end_date
+            AirQualityReading.datetime >= start_datetime,
+            AirQualityReading.datetime <= end_datetime
         )
         
         if station_id:
@@ -96,6 +108,10 @@ class ReportGenerator:
             query = query.filter(AirQualityReading.pollutant_id == pollutant_id)
         
         readings = query.order_by(AirQualityReading.datetime).all()
+        
+        logger.info(f"Report data fetch: start={start_datetime}, end={end_datetime}, "
+                   f"station_id={station_id}, pollutant_id={pollutant_id}")
+        logger.info(f"Found {len(readings)} readings")
         
         # Get station info
         stations = {}

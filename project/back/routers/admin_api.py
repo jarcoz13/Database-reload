@@ -392,3 +392,37 @@ async def get_ingestion_logs(
         log["_id"] = str(log["_id"])
     
     return logs
+
+
+# =====================================================
+# DATA SEEDING
+# =====================================================
+
+@router.post("/seed/historical-data")
+def seed_historical_data(
+    days: int = Query(default=30, ge=1, le=365, description="Number of days to generate"),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate mock historical data for reports
+    Creates readings every 2 hours for all stations and pollutants
+    """
+    from jobs.seed_historical_data import seed_historical_data
+    
+    try:
+        seed_historical_data(days)
+        
+        # Count new readings
+        total_readings = db.query(AirQualityReading).count()
+        
+        return {
+            "status": "success",
+            "message": f"Successfully generated {days} days of historical data",
+            "total_readings": total_readings,
+            "estimated_new_readings": days * 12 * 5 * 6  # days * readings_per_day * stations * pollutants
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to seed historical data: {str(e)}"
+        )

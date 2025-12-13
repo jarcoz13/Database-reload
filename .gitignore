@@ -371,3 +371,4 @@ Thumbs.db
 
 # Temporary files
 src/Workshop_Latex/_temp_corrections/
+.env
