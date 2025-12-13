@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CORS Diagnostic Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .test-result {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+        .success {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border-color: #bee5eb;
+            color: #0c5460;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        pre {
+            background-color: #f4f4f4;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 CORS Diagnostic Test</h1>
+    <p>This page tests CORS connectivity between the frontend and backend.</p>
+    
+    <button onclick="runTests()">Run Tests</button>
+    <button onclick="location.reload()">Clear Results</button>
+    
+    <div id="results"></div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:8000';
+        
+        function addResult(title, message, type = 'info') {
+            const resultsDiv = document.getElementById('results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `test-result ${type}`;
+            resultDiv.innerHTML = `<strong>${title}</strong><br>${message}`;
+            resultsDiv.appendChild(resultDiv);
+        }
+
+        async function testBasicFetch() {
+            addResult('Test 1: Basic Fetch', 'Testing basic fetch to /api/stations...', 'info');
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/stations`);
+                if (response.ok) {
+                    const data = await response.json();
+                    addResult('✅ Basic Fetch Success', 
+                        `Status: ${response.status}<br>Stations found: ${data.length}<br>` +
+                        `CORS Headers: ${response.headers.get('access-control-allow-origin')}`, 
+                        'success');
+                    return true;
+                } else {
+                    addResult('❌ Basic Fetch Failed', 
+                        `Status: ${response.status}<br>Message: ${response.statusText}`, 
+                        'error');
+                    return false;
+                }
+            } catch (error) {
+                addResult('❌ Basic Fetch Error', 
+                    `Error: ${error.message}<br>This might be a network issue or CORS problem`, 
+                    'error');
+                return false;
+            }
+        }
+
+        async function testWithCredentials() {
+            addResult('Test 2: Fetch with Credentials', 'Testing fetch with credentials...', 'info');
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/stations`, {
+                    method: 'GET',
+                    mode: 'cors',
+                    credentials: 'include',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    addResult('✅ Credentials Fetch Success', 
+                        `Status: ${response.status}<br>Stations: ${data.length}`, 
+                        'success');
+                    return true;
+                } else {
+                    addResult('❌ Credentials Fetch Failed', 
+                        `Status: ${response.status}`, 
+                        'error');
+                    return false;
+                }
+            } catch (error) {
+                addResult('❌ Credentials Fetch Error', 
+                    `Error: ${error.message}`, 
+                    'error');
+                return false;
+            }
+        }
+
+        async function testReadings() {
+            addResult('Test 3: Readings Endpoint', 'Testing /api/readings/current...', 'info');
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/readings/current`, {
+                    method: 'GET',
+                    mode: 'cors',
+                    credentials: 'include'
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    addResult('✅ Readings Fetch Success', 
+                        `Status: ${response.status}<br>Readings found: ${data.length}`, 
+                        'success');
+                    return true;
+                } else {
+                    addResult('❌ Readings Fetch Failed', 
+                        `Status: ${response.status}`, 
+                        'error');
+                    return false;
+                }
+            } catch (error) {
+                addResult('❌ Readings Fetch Error', 
+                    `Error: ${error.message}`, 
+                    'error');
+                return false;
+            }
+        }
+
+        async function checkBrowserExtensions() {
+            addResult('Test 4: Browser Environment', 
+                `User Agent: ${navigator.userAgent}<br>` +
+                `Location: ${window.location.href}<br>` +
+                `<strong>Note:</strong> If you have browser extensions that modify requests (ad blockers, privacy tools), ` +
+                `try disabling them or using incognito/private mode.`, 
+                'info');
+        }
+
+        async function runTests() {
+            document.getElementById('results').innerHTML = '';
+            addResult('🚀 Starting Tests', `Testing API at: ${API_BASE_URL}`, 'info');
+            
+            await testBasicFetch();
+            await testWithCredentials();
+            await testReadings();
+            await checkBrowserExtensions();
+            
+            addResult('✅ Tests Complete', 
+                'Check the results above. If tests passed but the main app still fails, ' +
+                'the issue might be with browser extensions or caching. Try:<br>' +
+                '• Disable browser extensions<br>' +
+                '• Use incognito/private mode<br>' +
+                '• Clear browser cache<br>' +
+                '• Try a different browser', 
+                'info');
+        }
+    </script>
+</body>
+</html>

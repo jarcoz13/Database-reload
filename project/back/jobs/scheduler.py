@@ -68,16 +68,17 @@ class JobScheduler:
         self.scheduler.shutdown()
         logger.info("Job scheduler stopped")
     
-    def run_now(self, job_name: str):
+    async def run_now(self, job_name: str):
         """Manually trigger a job"""
-        if job_name == "ingestion":
+        if job_name == "ingestion_job":
             logger.info("Manually triggering ingestion job...")
-            return self.ingestion_job.run()
-        elif job_name == "aggregation":
+            return await self.ingestion_job.run()
+        elif job_name == "daily_aggregation_job":
             logger.info("Manually triggering aggregation job...")
-            return self.aggregation_job.run()
+            return await self.aggregation_job.run()
         else:
             logger.error(f"Unknown job: {job_name}")
+            return None
             return None
     
     def get_job_status(self):

@@ -24,7 +24,7 @@ class MapRegion(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String(255), unique=True, nullable=False)
     description = Column(Text)
-    geom = Column(String)  # PostGIS geometry - simplified as string for now
+    geom = Column(String, nullable=True)  # PostGIS geometry - simplified as string for now
     created_at = Column(DateTime, server_default=func.now())
     
     # Relationships

@@ -14,6 +14,7 @@ from database.postgres_db import SessionLocal
 from database.mongo_db import get_data_ingestion_logs_collection
 from services.mock_providers import MockServiceManager
 from models import Provider
+from jobs.normalizer import DataNormalizer
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ class IngestionJob:
     def __init__(self):
         self.mock_service = MockServiceManager()
         self.mongo_logs = get_data_ingestion_logs_collection()
+        self.normalizer = DataNormalizer()
         
     async def run(self):
         """Main execution method"""
@@ -57,13 +59,16 @@ class IngestionJob:
                     provider_data = await self._fetch_provider_data(provider)
                     
                     if provider_data:
-                        results["providers_processed"] += 1
-                        results["total_readings"] += len(provider_data)
+                        raw_count = len(provider_data)
+                        
+                        # Normalize and save to database
+                        norm_stats = await self.normalizer.normalize_and_save(provider_data, provider.name)
+                        results["total_readings"] += norm_stats.get("saved", 0)
                         
                         # Log to MongoDB
                         await self._log_ingestion(provider.name, provider_data, "success")
                         
-                        logger.info(f"Successfully fetched {len(provider_data)} readings from {provider.name}")
+                        logger.info(f"Fetched {raw_count} records from {provider.name}, saved {norm_stats.get('saved', 0)} readings")
                     
                 except Exception as e:
                     error_msg = f"Error fetching data from {provider.name}: {str(e)}"

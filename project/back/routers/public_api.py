@@ -4,16 +4,19 @@ Serves citizen and researcher requests for air quality data
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime, timedelta
+import os
 
 from database.postgres_db import get_db
-from models import Station, AirQualityReading, Alert, Recommendation, AirQualityDailyStats, Pollutant
+from models import Station, AirQualityReading, Alert, Recommendation, AirQualityDailyStats, Pollutant, Report
 from schemas import (
     StationResponse, ReadingResponse, AlertResponse, AlertCreate, AlertUpdate,
-    RecommendationResponse, DailyStatsResponse
+    RecommendationResponse, DailyStatsResponse, ReportCreate, ReportResponse
 )
+from services.report_generator import ReportGenerator
 
 router = APIRouter(prefix="/api", tags=["public"])
 
@@ -306,3 +309,99 @@ def get_pollutants(db: Session = Depends(get_db)):
     """Get list of all monitored pollutants"""
     pollutants = db.query(Pollutant).all()
     return pollutants
+
+
+# =====================================================
+# REPORTS
+# =====================================================
+
+@router.get("/reports", response_model=List[ReportResponse])
+def get_reports(
+    user_id: int = Query(..., description="User ID (from auth token)"),
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db)
+):
+    """Get list of reports for a user"""
+    reports = db.query(Report).filter(
+        Report.user_id == user_id
+    ).order_by(
+        Report.created_at.desc()
+    ).offset(skip).limit(limit).all()
+    
+    return reports
+
+
+@router.post("/reports", response_model=ReportResponse)
+def create_report(
+    report: ReportCreate,
+    user_id: int = Query(..., description="User ID (from auth token)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Create and generate a new report
+    Supports PDF and CSV formats
+    """
+    # Validate dates
+    if report.end_date < report.start_date:
+        raise HTTPException(status_code=400, detail="End date must be after start date")
+    
+    # Create report record
+    db_report = Report(
+        user_id=user_id,
+        station_id=report.station_id,
+        pollutant_id=report.pollutant_id,
+        title=report.title,
+        start_date=report.start_date,
+        end_date=report.end_date,
+        file_format=report.file_format
+    )
+    db.add(db_report)
+    db.commit()
+    db.refresh(db_report)
+    
+    # Generate report file
+    try:
+        if report.file_format.upper() == "PDF":
+            generator = ReportGenerator(db)
+            file_path = generator.generate_pdf_report(db_report, user_id)
+            db_report.file_path = file_path
+            db_report.generated_at = datetime.now()
+            db.commit()
+            db.refresh(db_report)
+        else:
+            # CSV generation can be added later
+            raise HTTPException(status_code=501, detail="CSV format not yet implemented")
+    except Exception as e:
+        db.delete(db_report)
+        db.commit()
+        raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")
+    
+    return db_report
+
+
+@router.get("/reports/{report_id}/download")
+def download_report(
+    report_id: int,
+    user_id: int = Query(..., description="User ID (from auth token)"),
+    db: Session = Depends(get_db)
+):
+    """Download a generated report"""
+    report = db.query(Report).filter(
+        Report.id == report_id,
+        Report.user_id == user_id
+    ).first()
+    
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    
+    if not report.file_path or not os.path.exists(report.file_path):
+        raise HTTPException(status_code=404, detail="Report file not found")
+    
+    filename = f"{report.title.replace(' ', '_')}_{report.id}.{report.file_format.lower()}"
+    
+    return FileResponse(
+        path=report.file_path,
+        filename=filename,
+        media_type='application/pdf' if report.file_format == 'PDF' else 'text/csv'
+    )
