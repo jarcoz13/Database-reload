@@ -426,36 +426,44 @@ export default {
 }
 
 h1 {
-  color: #2c3e50;
-  font-size: 2rem;
+  font-size: 3rem;
   margin-bottom: 2rem;
+  background: var(--accent-yellow);
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border: var(--border-width) solid var(--border-color);
+  box-shadow: 4px 4px 0 0 var(--border-color);
 }
 
 h2 {
-  color: #2c3e50;
   font-size: 1.5rem;
   margin-bottom: 1rem;
+  background: var(--accent-blue);
+  color: white;
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border: var(--border-width) solid var(--border-color);
 }
 
 .subtitle {
-  color: #666;
-  font-size: 0.95rem;
+  font-weight: bold;
   margin-bottom: 1.5rem;
+  font-family: var(--font-main);
 }
 
 /* Report Form */
 .report-form {
   background: white;
-  border-radius: 8px;
+  border: var(--border-width) solid var(--border-color);
   padding: 2rem;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0 0 var(--border-color);
   margin-bottom: 3rem;
 }
 
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  gap: 1.5rem;
   margin-bottom: 1.5rem;
 }
 
@@ -470,48 +478,55 @@ h2 {
 }
 
 .form-group label {
-  font-weight: 600;
-  color: #444;
+  font-weight: 900;
+  color: var(--text-color);
   margin-bottom: 0.5rem;
   font-size: 0.9rem;
+  text-transform: uppercase;
 }
 
 .form-group input,
 .form-group select {
   padding: 0.75rem;
-  border: 2px solid #e0e0e0;
-  border-radius: 6px;
+  border: var(--border-width) solid var(--border-color);
   font-size: 1rem;
-  transition: border-color 0.3s;
+  background: white;
+  box-shadow: 4px 4px 0 0 var(--border-color);
+  transition: all 0.2s;
 }
 
 .form-group input:focus,
 .form-group select:focus {
   outline: none;
-  border-color: #4CAF50;
+  background: var(--accent-yellow);
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 0 var(--border-color);
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #4CAF50, #45a049);
-  color: white;
+  background: var(--accent-green);
+  color: var(--text-color);
   padding: 1rem 2rem;
-  border: none;
-  border-radius: 6px;
+  border: var(--border-width) solid var(--border-color);
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 900;
+  text-transform: uppercase;
   cursor: pointer;
-  transition: all 0.3s;
-  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+  transition: all 0.2s;
+  box-shadow: 4px 4px 0 0 var(--border-color);
 }
 
 .btn-primary:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(76, 175, 80, 0.4);
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 0 var(--border-color);
+  background: var(--accent-green);
 }
 
 .btn-primary:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
 }
 
 /* Reports List */
@@ -523,7 +538,10 @@ h2 {
 .empty-state {
   text-align: center;
   padding: 3rem;
-  color: #666;
+  background: white;
+  border: var(--border-width) solid var(--border-color);
+  font-weight: bold;
+  box-shadow: 4px 4px 0 0 var(--border-color);
 }
 
 .report-cards {
@@ -533,15 +551,15 @@ h2 {
 
 .report-card {
   background: white;
-  border-radius: 8px;
+  border: var(--border-width) solid var(--border-color);
   padding: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  transition: transform 0.3s, box-shadow 0.3s;
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0 0 var(--border-color);
+  transition: transform 0.2s;
 }
 
 .report-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  transform: translate(-4px, -4px);
+  box-shadow: calc(var(--shadow-offset) + 4px) calc(var(--shadow-offset) + 4px) 0 0 var(--border-color);
 }
 
 .report-header {
@@ -550,31 +568,32 @@ h2 {
   align-items: center;
   margin-bottom: 1.5rem;
   padding-bottom: 1rem;
-  border-bottom: 2px solid #f0f0f0;
+  border-bottom: var(--border-width) solid var(--border-color);
 }
 
 .report-header h3 {
   margin: 0;
-  color: #2c3e50;
   font-size: 1.3rem;
+  background: var(--accent-yellow);
+  padding: 0.2rem 0.5rem;
+  border: 2px solid var(--border-color);
 }
 
 .format-badge {
   padding: 0.4rem 0.8rem;
-  border-radius: 20px;
   font-size: 0.85rem;
-  font-weight: 600;
+  font-weight: 900;
   text-transform: uppercase;
+  border: 2px solid var(--border-color);
+  color: white;
 }
 
 .format-badge.pdf {
-  background: linear-gradient(135deg, #e74c3c, #c0392b);
-  color: white;
+  background: var(--accent-red);
 }
 
 .format-badge.csv {
-  background: linear-gradient(135deg, #3498db, #2980b9);
-  color: white;
+  background: var(--accent-blue);
 }
 
 .report-details {
@@ -588,6 +607,9 @@ h2 {
   display: flex;
   gap: 0.75rem;
   align-items: flex-start;
+  padding: 0.5rem;
+  background: #f9f9f9;
+  border: 2px solid var(--border-color);
 }
 
 .detail-item .icon {
@@ -597,15 +619,15 @@ h2 {
 
 .detail-label {
   font-size: 0.8rem;
-  color: #888;
+  font-weight: bold;
+  text-transform: uppercase;
   margin-bottom: 0.25rem;
-  font-weight: 500;
 }
 
 .detail-value {
   font-size: 0.95rem;
-  color: #333;
-  font-weight: 600;
+  font-weight: bold;
+  font-family: var(--font-main);
 }
 
 .report-actions {
@@ -613,25 +635,26 @@ h2 {
   gap: 1rem;
   justify-content: flex-end;
   padding-top: 1rem;
-  border-top: 2px solid #f0f0f0;
+  border-top: var(--border-width) solid var(--border-color);
 }
 
 .btn-download {
-  background: linear-gradient(135deg, #4CAF50, #45a049);
-  color: white;
+  background: var(--accent-purple);
+  color: var(--text-color);
   padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: 6px;
+  border: var(--border-width) solid var(--border-color);
   font-size: 0.95rem;
-  font-weight: 600;
+  font-weight: 900;
+  text-transform: uppercase;
   cursor: pointer;
-  transition: all 0.3s;
-  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+  transition: all 0.2s;
+  box-shadow: 4px 4px 0 0 var(--border-color);
 }
 
 .btn-download:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 0 var(--border-color);
+  background: var(--accent-purple);
 }
 
 /* Responsive Design */

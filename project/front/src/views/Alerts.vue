@@ -410,46 +410,63 @@ export default {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 2rem;
+  background: var(--accent-purple);
+  padding: 1.5rem;
+  border: var(--border-width) solid var(--border-color);
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0 0 var(--border-color);
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 2rem;
 }
 
 .create-btn {
   padding: 0.75rem 1.5rem;
-  background: var(--primary-color, #4CAF50);
-  color: white;
-  border: none;
-  border-radius: 4px;
+  background: var(--accent-green);
+  color: var(--text-color);
+  border: var(--border-width) solid var(--border-color);
   cursor: pointer;
   font-size: 1rem;
-  font-weight: 500;
-  transition: background 0.3s;
+  font-weight: 900;
+  text-transform: uppercase;
+  box-shadow: 4px 4px 0 0 var(--border-color);
+  transition: all 0.2s;
 }
 
 .create-btn:hover {
-  background: var(--primary-dark, #45a049);
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 0 var(--border-color);
+  background: var(--accent-green);
 }
 
 .loading {
   text-align: center;
   padding: 2rem;
-  font-size: 1.2rem;
-  color: #666;
+  font-size: 1.5rem;
+  font-weight: bold;
+  background: white;
+  border: var(--border-width) solid var(--border-color);
+  margin: 2rem 0;
 }
 
 .error-message {
-  background: #fee;
-  border: 1px solid #fcc;
-  color: #c33;
+  background: var(--accent-red);
+  border: var(--border-width) solid var(--border-color);
+  color: white;
   padding: 1rem;
-  border-radius: 4px;
+  font-weight: bold;
   margin-bottom: 1rem;
+  box-shadow: 4px 4px 0 0 var(--border-color);
 }
 
 .no-data {
   text-align: center;
   padding: 3rem;
-  background: #f9f9f9;
-  border-radius: 8px;
-  color: #666;
+  background: white;
+  border: var(--border-width) solid var(--border-color);
+  font-weight: bold;
+  box-shadow: 4px 4px 0 0 var(--border-color);
 }
 
 .no-data button {
@@ -459,21 +476,21 @@ export default {
 .alerts-container {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: 1.5rem;
-  margin-top: 1rem;
+  gap: 2rem;
+  margin-top: 2rem;
 }
 
 .card {
   background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  border: var(--border-width) solid var(--border-color);
   padding: 1.5rem;
-  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0 0 var(--border-color);
+  transition: transform 0.2s;
 }
 
 .card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  transform: translate(-4px, -4px);
+  box-shadow: calc(var(--shadow-offset) + 4px) calc(var(--shadow-offset) + 4px) 0 0 var(--border-color);
 }
 
 .alert-header {
@@ -482,7 +499,7 @@ export default {
   align-items: flex-start;
   margin-bottom: 1rem;
   padding-bottom: 0.75rem;
-  border-bottom: 2px solid #eee;
+  border-bottom: var(--border-width) solid var(--border-color);
 }
 
 .alert-title {
@@ -493,23 +510,28 @@ export default {
 
 .pollutant-badge {
   font-size: 1.25rem;
-  font-weight: bold;
-  color: #333;
+  font-weight: 900;
+  color: var(--text-color);
+  background: var(--accent-yellow);
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border: 2px solid var(--border-color);
 }
 
 .status-badge {
   padding: 0.25rem 0.75rem;
-  border-radius: 12px;
-  font-size: 0.85rem;
-  font-weight: 500;
+  font-weight: bold;
+  border: 2px solid var(--border-color);
   background: #ddd;
-  color: #666;
+  color: var(--text-color);
+  text-transform: uppercase;
+  font-size: 0.85rem;
   width: fit-content;
 }
 
 .status-badge.active {
-  background: #d4edda;
-  color: #28a745;
+  background: var(--accent-green);
+  color: var(--text-color);
 }
 
 .alert-actions {
@@ -518,71 +540,82 @@ export default {
 }
 
 .icon-btn {
-  background: #f0f0f0;
-  border: none;
-  border-radius: 4px;
+  background: white;
+  border: 2px solid var(--border-color);
   padding: 0.5rem;
   cursor: pointer;
   font-size: 1rem;
-  transition: background 0.2s;
+  transition: all 0.2s;
+  box-shadow: 2px 2px 0 0 var(--border-color);
 }
 
 .icon-btn:hover {
-  background: #e0e0e0;
+  transform: translate(-2px, -2px);
+  box-shadow: 4px 4px 0 0 var(--border-color);
+  background: var(--accent-yellow);
 }
 
 .icon-btn.delete:hover {
-  background: #fee;
-  color: #c33;
+  background: var(--accent-red);
+  color: white;
 }
 
 .alert-info {
   margin: 1rem 0;
+  padding: 1rem;
+  background: #f9f9f9;
+  border: 2px solid var(--border-color);
 }
 
 .alert-info p {
   margin: 0.5rem 0;
-  color: #555;
+  color: var(--text-color);
   font-size: 0.95rem;
+  font-weight: bold;
 }
 
 .alert-info .triggered {
-  color: #f59e0b;
-  font-style: italic;
+  color: white;
+  background: var(--accent-red);
+  padding: 0.2rem 0.5rem;
+  font-style: normal;
+  border: 2px solid var(--border-color);
+  display: inline-block;
 }
 
 .alert-footer {
   margin-top: 1rem;
   padding-top: 1rem;
-  border-top: 1px solid #eee;
+  border-top: var(--border-width) solid var(--border-color);
 }
 
 .toggle-btn {
   width: 100%;
   padding: 0.75rem;
-  border: 2px solid #ddd;
-  border-radius: 4px;
+  border: var(--border-width) solid var(--border-color);
   background: white;
-  color: #666;
+  color: var(--text-color);
   cursor: pointer;
-  font-weight: 500;
+  font-weight: 900;
+  text-transform: uppercase;
   transition: all 0.2s;
+  box-shadow: 4px 4px 0 0 var(--border-color);
 }
 
 .toggle-btn:hover {
-  border-color: #4CAF50;
-  color: #4CAF50;
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 0 var(--border-color);
+  background: var(--accent-yellow);
 }
 
 .toggle-btn.active {
-  background: #4CAF50;
-  color: white;
-  border-color: #4CAF50;
+  background: var(--accent-green);
+  color: var(--text-color);
 }
 
 .toggle-btn.active:hover {
-  background: #ef4444;
-  border-color: #ef4444;
+  background: var(--accent-red);
+  color: white;
 }
 
 /* Modal Styles */
@@ -592,21 +625,22 @@ export default {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(255, 255, 255, 0.9);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  backdrop-filter: blur(5px);
 }
 
 .modal {
   background: white;
-  border-radius: 8px;
+  border: var(--border-width) solid var(--border-color);
   width: 90%;
   max-width: 500px;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+  box-shadow: 10px 10px 0 0 var(--border-color);
 }
 
 .modal-header {
@@ -614,31 +648,41 @@ export default {
   justify-content: space-between;
   align-items: center;
   padding: 1.5rem;
-  border-bottom: 1px solid #eee;
+  border-bottom: var(--border-width) solid var(--border-color);
+  background: var(--accent-blue);
 }
 
 .modal-header h2 {
   margin: 0;
   font-size: 1.5rem;
+  color: white;
+  text-shadow: 2px 2px 0 var(--border-color);
 }
 
 .close-btn {
-  background: none;
-  border: none;
+  background: white;
+  border: 2px solid var(--border-color);
   font-size: 1.5rem;
   cursor: pointer;
-  color: #666;
+  color: var(--text-color);
   padding: 0;
-  width: 2rem;
-  height: 2rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 4px 4px 0 0 var(--border-color);
 }
 
 .close-btn:hover {
-  color: #333;
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 0 var(--border-color);
+  background: var(--accent-red);
+  color: white;
 }
 
 .modal-body {
-  padding: 1.5rem;
+  padding: 2rem;
 }
 
 .form-group {
@@ -648,32 +692,41 @@ export default {
 .form-group label {
   display: block;
   margin-bottom: 0.5rem;
-  font-weight: 500;
-  color: #333;
+  font-weight: 900;
+  color: var(--text-color);
+  text-transform: uppercase;
 }
 
 .form-group input,
 .form-group select {
   width: 100%;
   padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  border: var(--border-width) solid var(--border-color);
   font-size: 1rem;
   box-sizing: border-box;
+  background: white;
+  box-shadow: 4px 4px 0 0 var(--border-color);
+  transition: all 0.2s;
 }
 
 .form-group input:focus,
 .form-group select:focus {
   outline: none;
-  border-color: #4CAF50;
+  background: var(--accent-yellow);
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 0 var(--border-color);
 }
 
 .form-group .help-text {
   display: block;
   margin-top: 0.5rem;
   font-size: 0.85rem;
-  color: #666;
-  font-style: italic;
+  color: var(--text-color);
+  font-weight: bold;
+  background: var(--accent-yellow);
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--border-color);
 }
 
 .modal-footer {
@@ -681,41 +734,52 @@ export default {
   justify-content: flex-end;
   gap: 1rem;
   padding: 1.5rem;
-  border-top: 1px solid #eee;
+  border-top: var(--border-width) solid var(--border-color);
+  background: #f9f9f9;
 }
 
 .cancel-btn {
   padding: 0.75rem 1.5rem;
-  background: #f0f0f0;
-  color: #333;
-  border: none;
-  border-radius: 4px;
+  background: white;
+  color: var(--text-color);
+  border: var(--border-width) solid var(--border-color);
   cursor: pointer;
   font-size: 1rem;
-  transition: background 0.2s;
+  font-weight: 900;
+  text-transform: uppercase;
+  box-shadow: 4px 4px 0 0 var(--border-color);
+  transition: all 0.2s;
 }
 
 .cancel-btn:hover {
-  background: #e0e0e0;
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 0 var(--border-color);
+  background: var(--accent-red);
+  color: white;
 }
 
 .save-btn {
   padding: 0.75rem 1.5rem;
-  background: #4CAF50;
-  color: white;
-  border: none;
-  border-radius: 4px;
+  background: var(--accent-green);
+  color: var(--text-color);
+  border: var(--border-width) solid var(--border-color);
   cursor: pointer;
   font-size: 1rem;
-  transition: background 0.2s;
+  font-weight: 900;
+  text-transform: uppercase;
+  box-shadow: 4px 4px 0 0 var(--border-color);
+  transition: all 0.2s;
 }
 
 .save-btn:hover:not(:disabled) {
-  background: #45a049;
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 0 var(--border-color);
 }
 
 .save-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
 }
 </style>

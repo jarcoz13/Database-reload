@@ -1,23 +1,19 @@
 <template>
   <div id="app">
-    <nav class="navbar">
-      <div class="nav-container">
-        <router-link to="/" class="nav-brand">
-          🌍 Air Quality Monitor
-        </router-link>
-        <div class="nav-links">
-          <router-link to="/">Home</router-link>
-          <router-link to="/stations">Stations</router-link>
-          <router-link to="/alerts">Alerts</router-link>
-          <router-link to="/reports">Reports</router-link>
-        </div>
-      </div>
-    </nav>
+    <header class="neo-header">
+      <div class="logo">🌍 Air Quality Monitor</div>
+      <nav>
+        <router-link to="/">Home</router-link>
+        <router-link to="/stations">Stations</router-link>
+        <router-link to="/alerts">Alerts</router-link>
+        <router-link to="/reports">Reports</router-link>
+      </nav>
+    </header>
     <main class="main-content">
       <router-view />
     </main>
-    <footer class="footer">
-      <p>&copy; 2025 Air Quality Monitor. Jarcoz All rights reserved.</p>
+    <footer class="neo-footer">
+      <p>© 2025 Air Quality Monitor. Jarcoz All rights reserved.</p>
     </footer>
   </div>
 </template>
@@ -36,61 +32,65 @@ export default {
 }
 
 #app {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
 
-.navbar {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 1rem 2rem;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-}
-
-.nav-container {
-  max-width: 1200px;
-  margin: 0 auto;
+.neo-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 1.5rem 2rem;
+  border-bottom: var(--border-width) solid var(--border-color);
+  background: var(--bg-color);
 }
 
-.nav-brand {
+.logo {
+  font-family: var(--font-display);
   font-size: 1.5rem;
-  font-weight: bold;
-  color: white;
-  text-decoration: none;
+  font-weight: 900;
+  text-transform: uppercase;
+  background: var(--accent-yellow);
+  padding: 0.5rem 1rem;
+  border: var(--border-width) solid var(--border-color);
+  box-shadow: 4px 4px 0 0 var(--border-color);
 }
 
-.nav-links {
+nav {
   display: flex;
-  gap: 2rem;
+  gap: 1.5rem;
 }
 
-.nav-links a {
+nav a {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  font-size: 1.1rem;
+  padding: 0.5rem;
+  border: 2px solid transparent;
+}
+
+nav a:hover, nav a.router-link-active {
+  background: var(--accent-blue);
   color: white;
+  border: 2px solid var(--border-color);
+  box-shadow: 4px 4px 0 0 var(--border-color);
   text-decoration: none;
-  transition: opacity 0.3s;
-}
-
-.nav-links a:hover {
-  opacity: 0.8;
 }
 
 .main-content {
   flex: 1;
   max-width: 1200px;
   width: 100%;
-  margin: 2rem auto;
+  margin: 3rem auto;
   padding: 0 2rem;
 }
 
-.footer {
-  background: #f5f5f5;
-  padding: 1rem;
+.neo-footer {
+  border-top: var(--border-width) solid var(--border-color);
+  padding: 2rem;
   text-align: center;
-  color: #666;
+  background: var(--bg-color);
+  font-weight: bold;
 }
 </style>
