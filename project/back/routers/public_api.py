@@ -215,18 +215,23 @@ def get_user_alerts(
     return alerts
 
 
-@router.post("/alerts", response_model=AlertResponse)
+@router.post("/alerts", response_model=AlertResponse, status_code=201)
 def create_alert(
     alert: AlertCreate,
     user_id: int = Query(..., description="User ID (from auth token)"),
     db: Session = Depends(get_db)
 ):
     """Create a new alert for the user"""
-    db_alert = Alert(**alert.dict(), user_id=user_id)
-    db.add(db_alert)
-    db.commit()
-    db.refresh(db_alert)
-    return db_alert
+    try:
+        alert_data = alert.model_dump() if hasattr(alert, 'model_dump') else alert.dict()
+        db_alert = Alert(**alert_data, user_id=user_id)
+        db.add(db_alert)
+        db.commit()
+        db.refresh(db_alert)
+        return db_alert
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.patch("/alerts/{alert_id}", response_model=AlertResponse)
@@ -245,7 +250,8 @@ def update_alert(
     if not db_alert:
         raise HTTPException(status_code=404, detail="Alert not found")
     
-    for key, value in alert_update.dict(exclude_unset=True).items():
+    update_data = alert_update.model_dump(exclude_unset=True) if hasattr(alert_update, 'model_dump') else alert_update.dict(exclude_unset=True)
+    for key, value in update_data.items():
         setattr(db_alert, key, value)
     
     db.commit()

@@ -6,7 +6,7 @@ Run this after the database schema is created
 
 from sqlalchemy.orm import Session
 from database.postgres_db import SessionLocal, engine, Base
-from models import Role, Permission, RolePermission, Pollutant, Provider, Station, MapRegion
+from models import Role, Permission, RolePermission, Pollutant, Provider, Station, MapRegion, AppUser
 
 def init_database():
     """Initialize database with seed data"""
@@ -209,6 +209,52 @@ def init_database():
             db.add(station)
         
         print(f"Created {len(stations_data)} monitoring stations")
+        
+        # Insert test users only if they don't exist
+        from models import AppUser
+        existing_users = db.query(AppUser).filter(AppUser.username.like('testuser%')).count()
+        
+        if existing_users == 0:
+            # Get the Citizen role for test users
+            citizen_role = next((r for r in roles if r.name == "Citizen"), roles[0])
+            
+            test_users_data = [
+                {
+                    "username": "testuser1",
+                    "email": "user1@test.com",
+                    "password_hash": "hash123",  # In production, use proper hashing
+                    "full_name": "Test User 1",
+                    "role_id": citizen_role.id,
+                    "location": "Bogotá",
+                    "is_active": True
+                },
+                {
+                    "username": "testuser2",
+                    "email": "user2@test.com",
+                    "password_hash": "hash456",
+                    "full_name": "Test User 2",
+                    "role_id": citizen_role.id,
+                    "location": "Medellín",
+                    "is_active": True
+                },
+                {
+                    "username": "testuser3",
+                    "email": "user3@test.com",
+                    "password_hash": "hash789",
+                    "full_name": "Test User 3",
+                    "role_id": citizen_role.id,
+                    "location": "Cali",
+                    "is_active": True
+                }
+            ]
+            
+            for user_data in test_users_data:
+                user = AppUser(**user_data)
+                db.add(user)
+            
+            print(f"Created {len(test_users_data)} test users")
+        else:
+            print(f"Test users already exist ({existing_users} users found)")
         
         # Commit all changes
         db.commit()

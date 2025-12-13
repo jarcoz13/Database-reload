@@ -118,6 +118,18 @@ La base de datos PostgreSQL almacena:
 
 **Esquema inicializado automáticamente** desde [init_database.sql](../docs/Diagram_ER/init_database.sql)
 
+#### Usuarios de Prueba
+
+El sistema inicializa automáticamente 3 usuarios de prueba:
+
+| Username   | Email            | Password | Role    | Location |
+|-----------|------------------|----------|---------|----------|
+| testuser1 | user1@test.com   | hash123  | Citizen | Bogotá   |
+| testuser2 | user2@test.com   | hash456  | Citizen | Medellín |
+| testuser3 | user3@test.com   | hash789  | Citizen | Cali     |
+
+**Nota**: En producción, cambiar estos usuarios y usar contraseñas con hash seguro (bcrypt/argon2).
+
 ### MongoDB (Logs y Datos No Estructurados)
 
 MongoDB almacena:
@@ -219,6 +231,28 @@ Ambos servicios (frontend y backend) tienen hot reload habilitado:
 - Los cambios en el código se reflejan automáticamente
 - No es necesario reiniciar los contenedores para ver los cambios
 
+## 🌐 API y CORS
+
+### Configuración de CORS
+
+El backend está configurado para aceptar peticiones desde:
+- `http://localhost:5173` (Frontend local)
+- `http://127.0.0.1:5173` (Frontend local via 127.0.0.1)
+- `http://localhost:3000` (Desarrollo alternativo)
+
+En modo **DEBUG=true**, CORS acepta todos los orígenes (`["*"]`).
+
+### Endpoints Principales
+
+- **GET /api/stations** - Listar estaciones de monitoreo
+- **GET /api/readings** - Obtener lecturas de calidad del aire
+- **GET /api/alerts?user_id={id}** - Listar alertas del usuario
+- **POST /api/alerts?user_id={id}** - Crear nueva alerta
+- **PATCH /api/alerts/{alert_id}?user_id={id}** - Actualizar alerta
+- **DELETE /api/alerts/{alert_id}?user_id={id}** - Eliminar alerta
+
+Ver documentación completa en: http://localhost:8000/docs
+
 ## 🔒 Seguridad
 
 ⚠️ **IMPORTANTE**: Las credenciales en este proyecto son para desarrollo. En producción:
@@ -229,6 +263,8 @@ Ambos servicios (frontend y backend) tienen hot reload habilitado:
 4. Implementar autenticación JWT robusta
 5. Habilitar HTTPS
 6. Configurar firewall y reglas de red
+7. Deshabilitar modo DEBUG
+8. Configurar CORS con orígenes específicos
 
 ## 📚 Documentación Adicional
 
@@ -376,3 +412,22 @@ Ver archivo [LICENSE](../LICENSE) para más detalles.
 - **Diagrama ER**: [../docs/Diagram_ER/Diagram_ER.puml](../docs/Diagram_ER/Diagram_ER.puml)
 - **Schema SQL**: [../docs/Diagram_ER/init_database.sql](../docs/Diagram_ER/init_database.sql)
 - **Documento de Arquitectura**: [../src/Report_Latex/chapters/03_architecture.tex](../src/Report_Latex/chapters/03_architecture.tex)
+
+## ✅ Validación del Sistema
+
+Para verificar que todos los componentes están configurados correctamente:
+
+```bash
+./validate.sh
+```
+
+Este script verifica:
+- ✓ Contenedores Docker en ejecución
+- ✓ Inicialización de base de datos
+- ✓ Usuarios de prueba creados
+- ✓ Endpoints de API funcionando
+- ✓ Configuración de CORS
+- ✓ Ingesta de datos operativa
+- ✓ Frontend accesible
+
+Ver [CHANGELOG.md](CHANGELOG.md) para registro completo de cambios.
