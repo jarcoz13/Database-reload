@@ -1,0 +1,520 @@
+\documentclass[11pt,aspectratio=16:9]{beamer}
+
+% Theme and Color Scheme
+\usetheme{Madrid}
+\usecolortheme{default}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[page number]
+
+% Packages
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{tikz}
+\usetikzlibrary{shapes,arrows,positioning}
+
+% Configure graphics path
+\graphicspath{{images/}}
+
+% Define custom colors
+\definecolor{darkblue}{rgb}{0.1, 0.3, 0.6}
+\definecolor{lightblue}{rgb}{0.8, 0.9, 1.0}
+\definecolor{darkgreen}{rgb}{0.2, 0.5, 0.3}
+
+% Title page configuration
+\title{Architecture for Real-Time Air Quality Monitoring}
+\subtitle{and Personalized Health Recommendations in Bogotá}
+\author{Jose Alejandro Cortazar López \\ Johan Esteban Castaño Martínez \\ Stivel Pinilla Puerta}
+\institute{Systems Engineering Program \\ Francisco José de Caldas District University}
+\date{December 2025}
+
+% Custom title page
+\defbeamertemplate*{title page}{custom}[1][]{
+  \vbox{}
+  \vfill
+  \begin{centering}
+    \begin{beamercolorbox}[sep=8pt,center,#1]{title}
+      \usebeamerfont{title}\inserttitle\par%
+      \ifx\insertsubtitle\@empty%
+      \else%
+        \vskip0.25em%
+        {\usebeamerfont{subtitle}\usebeamercolor[fg]{subtitle}\insertsubtitle\par}%
+      \fi%
+    \end{beamercolorbox}%
+    \vskip1em\par
+    \begin{beamercolorbox}[sep=8pt,center,#1]{author}
+      \usebeamerfont{author}\insertauthor
+    \end{beamercolorbox}
+    \begin{beamercolorbox}[sep=8pt,center,#1]{institute}
+      \usebeamerfont{institute}\insertinstitute
+    \end{beamercolorbox}
+    \begin{beamercolorbox}[sep=8pt,center,#1]{date}
+      \usebeamerfont{date}\insertdate
+    \end{beamercolorbox}
+  \end{centering}
+  \vfill
+}
+
+\setbeamertemplate{title page}[custom]
+
+\begin{document}
+
+% ===== SLIDE 1: TITLE PAGE =====
+\begin{frame}
+  \titlepage
+\end{frame}
+
+% ===== SLIDE 2: TABLE OF CONTENTS =====
+\begin{frame}{Agenda}
+  \tableofcontents
+\end{frame}
+
+% ===== SECTION 1: PROBLEM & CONTEXT =====
+\section{Problem Statement}
+
+\begin{frame}{Motivation: Air Quality Crisis in Bogotá}
+  \begin{columns}[T]
+    \column{0.5\textwidth}
+    \begin{itemize}
+      \item \textbf{Public Health Threat}: Air pollution affects millions globally
+      \item \textbf{Fragmented Data}: Multiple disconnected monitoring sources
+      \item \textbf{Limited Accessibility}: Citizens lack integrated real-time information
+      \item \textbf{Absence of Personalization}: Generic alerts without health risk profiles
+    \end{itemize}
+    
+    \column{0.5\textwidth}
+    \begin{block}{Current Challenges}
+      \begin{itemize}
+        \item No unified air quality data platform
+        \item Response latency from multiple APIs
+        \item Difficult health decision-making
+        \item Scalability concerns for city-wide deployment
+      \end{itemize}
+    \end{block}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Problem Statement}
+  \textbf{Core Problem:} Bogotá residents lack timely access to \alert{integrated} air quality data across multiple monitoring sources.
+  
+  \vspace{1em}
+  
+  \textbf{Specific Gaps:}
+  \begin{enumerate}
+    \item \textbf{Data Fragmentation}: AQICN, Google Maps API, IQAir operate independently
+    \item \textbf{Performance Constraints}: High-latency queries unsuitable for real-time dashboards
+    \item \textbf{Lack of Personalization}: No health recommendations tailored to individual profiles
+    \item \textbf{Scalability Limitations}: Current systems cannot support city-wide deployment
+  \end{enumerate}
+  
+  \vspace{1em}
+  
+  \textbf{Solution Requirement}: Production-ready architecture combining multi-source integration, normalized schema, sub-100ms queries, and personalized health guidance.
+\end{frame}
+
+% ===== SECTION 2: OBJECTIVES =====
+\section{Objectives}
+
+\begin{frame}{Primary \& Secondary Objectives}
+  \textbf{Primary Objective:}
+  \begin{block}{}
+    Design and validate a \textit{production-ready} air quality monitoring architecture that integrates multi-source data, normalizes heterogeneous payloads into a unified 3NF schema, and delivers personalized health recommendations.
+  \end{block}
+  
+  \vspace{1em}
+  
+  \textbf{Secondary Objectives:}
+  \begin{enumerate}
+    \item Data Integration: Aggregate AQICN, Google, IQAir with deduplication \& validation
+    \item Database Design: Implement 3NF schema with temporal partitioning (\(<100\)ms queries)
+    \item Personalization: Rule-based recommendations aligned with EPA/WHO standards
+    \item Concurrency \& Scalability: Support 50--100+ concurrent users
+    \item Replicability: Generalize for multi-city Latin American deployment
+  \end{enumerate}
+\end{frame}
+
+% ===== SECTION 3: PROPOSED SOLUTION =====
+\section{Proposed Solution}
+
+\begin{frame}{System Architecture Overview}
+  \begin{center}
+    \includegraphics[width=\textwidth]{fig1_architecture}
+  \end{center}
+  
+  \vspace{0.5em}
+  
+  \textit{4-layer architecture: Ingestion → Persistence → Application → Presentation}
+\end{frame}
+
+\begin{frame}{Layer 1: Ingestion}
+  \textbf{Python APScheduler-based Data Pipeline}
+  
+  \vspace{0.5em}
+  
+  \begin{itemize}
+    \item \textbf{Polling Frequency}: 10-minute intervals
+    \item \textbf{Data Sources}: 
+      \begin{itemize}
+        \item AQICN (Air Quality Index)
+        \item Google Maps Air Quality API
+        \item IQAir (Premium air quality data)
+      \end{itemize}
+    \item \textbf{Output}: 216 readings/hour (36 readings × 6 cycles)
+    \item \textbf{Coverage}: 6 monitoring stations × 6 pollutants (PM$_{2.5}$, PM$_{10}$, NO$_2$, O$_3$, SO$_2$, CO)
+    \item \textbf{Processing}: JSON validation via Pydantic, deduplication, idempotent upserts
+  \end{itemize}
+  
+  \begin{block}{Key Advantage}
+    Zero MVCC contention enables continuous ingestion without blocking analytical queries
+  \end{block}
+\end{frame}
+
+\begin{frame}{Layer 2: Persistence (Database)}
+  \textbf{PostgreSQL 12+ with 3NF Normalized Schema}
+  
+  \vspace{0.5em}
+  
+  \begin{columns}[T]
+    \column{0.5\textwidth}
+    \textbf{8 Core Entities:}
+    \begin{itemize}
+      \item Station
+      \item Pollutant
+      \item Provider
+      \item AirQualityReading
+      \item AppUser
+      \item Alert
+      \item Recommendation
+      \item ProductRecommendation
+    \end{itemize}
+    
+    \column{0.5\textwidth}
+    \textbf{Optimization Techniques:}
+    \begin{itemize}
+      \item Temporal partitioning (monthly chunks)
+      \item Composite B-tree indexes
+      \item Materialized views for aggregates
+      \item Constraint exclusion pruning
+      \item MongoDB for schema-flexible user preferences
+    \end{itemize}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Layer 3: Application}
+  \textbf{FastAPI REST API with Intelligent Caching}
+  
+  \vspace{0.5em}
+  
+  \begin{itemize}
+    \item \textbf{Framework}: FastAPI (Python async framework)
+    \item \textbf{Caching}: Redis with 5--10 minute TTL
+    \item \textbf{Connection Pooling}: PgBouncer (50 connections)
+    \item \textbf{Recommendation Engine}: 
+      \begin{itemize}
+        \item Rule-based health guidance
+        \item Personalization by age, respiratory conditions, activity level
+        \item Mapped to EPA/WHO AQI standards
+      \end{itemize}
+    \item \textbf{Endpoints}: 
+      \begin{itemize}
+        \item Latest readings by station
+        \item Historical trends (7-day, 30-day, 1-year)
+        \item User-specific alerts and recommendations
+      \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Layer 4: Presentation}
+  \textbf{Interactive User Dashboard}
+  
+  \vspace{0.5em}
+  
+  \textbf{Technology Stack}: React/Vue.js with responsive design
+  
+  \vspace{0.5em}
+  
+  \textbf{Key Features:}
+  \begin{itemize}
+    \item Real-time AQI display with color-coded severity (Green → Red)
+    \item Interactive time-series charts (7-day, 30-day, 1-year trends)
+    \item Geospatial heatmaps showing pollution hotspots
+    \item Personalized health recommendations
+    \item User alerts and notification center
+    \item Mobile-responsive design (Android/iOS compatible)
+  \end{itemize}
+\end{frame}
+
+% ===== SECTION 4: TECHNICAL IMPLEMENTATION =====
+\section{Technical Details}
+
+\begin{frame}{Database Schema: Normalization (3NF)}
+  \begin{center}
+    \begin{tabular}{lp{5cm}}
+      \toprule
+      \textbf{Entity} & \textbf{Description} \\
+      \midrule
+      Station & Geographic location with lat/lon, city metadata \\
+      Pollutant & PM2.5, PM10, NO2, O3, SO2, CO with WHO limits \\
+      Provider & AQICN, Google, IQAir with API credentials \\
+      AirQualityReading & Timestamped measurements (Station, Pollutant, Provider, Value) \\
+      AppUser & Citizen profiles with health profile (age, respiratory conditions) \\
+      Alert & User-configured thresholds (e.g., PM2.5 > 75 microg/m3) \\
+      Recommendation & Health guidance rules mapped to AQI levels \\
+      ProductRec. & Protective products (masks, air purifiers) per AQI level \\
+      \bottomrule
+    \end{tabular}
+  \end{center}
+  
+  \begin{block}{Design Principle}
+    Eliminates redundancy while maintaining referential integrity through composite primary/foreign keys
+  \end{block}
+\end{frame}
+
+\begin{frame}{Query Optimization Strategies}
+  \textbf{Performance Targets}: Sub-100ms latency on 85,000+ readings
+  
+  \vspace{1em}
+  
+  \begin{columns}[T]
+    \column{0.5\textwidth}
+    \textbf{Indexing Strategy:}
+    \begin{itemize}
+      \item Composite B-tree: (Station, Timestamp, Pollutant)
+      \item Partial indexes on active alerts
+      \item BRIN indexes on temporal columns
+      \item Hash indexes on provider IDs
+    \end{itemize}
+    
+    \column{0.5\textwidth}
+    \textbf{Partitioning \& Views:}
+    \begin{itemize}
+      \item Range partitioning by month
+      \item Constraint exclusion pruning
+      \item Materialized views for daily aggregates
+      \item 35× row reduction (85K → 2.4K)
+    \end{itemize}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Query Optimization: Example}
+  \textbf{Query 1: Latest readings by station}
+  
+  \vspace{1em}
+  
+  \begin{block}{SQL Query}
+    \small
+    \texttt{SELECT s.name, p.name, aqr.value, aqr.timestamp \\
+    FROM AirQualityReading aqr \\
+    JOIN Station s ON aqr.station\_id = s.id \\
+    JOIN Pollutant p ON aqr.pollutant\_id = p.id \\
+    WHERE aqr.timestamp $>$ NOW() - INTERVAL '1 hour'\\
+    ORDER BY aqr.timestamp DESC LIMIT 1;}
+  \end{block}
+  
+  \vspace{1em}
+  
+  \textbf{Performance}: \textcolor{darkgreen}{42.8 ms} (target: $<$50 ms) [OK]
+  \begin{itemize}
+    \item Composite index enables single-pass scan
+    \item Constraint exclusion limits partitions scanned
+  \end{itemize}
+\end{frame}
+
+% ===== SECTION 5: RESULTS =====
+\section{Results \& Validation}
+
+\begin{frame}{Query Performance Validation}
+  \textbf{Baseline}: 85,000 air quality readings across 6 stations and 6 pollutants
+  
+  \vspace{1em}
+  
+  \begin{center}
+    \begin{tabular}{llll}
+      \toprule
+      \textbf{Query ID} & \textbf{Description} & \textbf{Latency} & \textbf{Target} \\
+      \midrule
+      Q1 & Latest readings/station & 42.8 ms & <50 ms [OK] \\
+      Q2 & Monthly historical avg & 127.3 ms & <150 ms [OK] \\
+      Q3 & Active alerts (7-day) & 143.6 ms & <150 ms [OK] \\
+      Q4 & 24-hour completeness & 87.5 ms & <100 ms [OK] \\
+      Q5 & User recommendations & 73.9 ms & <80 ms [OK] \\
+      \bottomrule
+    \end{tabular}
+  \end{center}
+  
+  \vspace{1em}
+  
+  \textit{All 5 core queries meet or exceed performance targets}
+\end{frame}
+
+\begin{frame}{Optimization Impact: Before vs. After}
+  \textbf{Effect of Temporal Partitioning:}
+  
+  \vspace{1em}
+  
+  \begin{columns}[T]
+    \column{0.5\textwidth}
+    \textbf{Point Query (Q1):}
+    \begin{itemize}
+      \item Without partitioning: 48.2 ms
+      \item With partitioning: 42.8 ms
+      \item \textcolor{darkgreen}{Improvement: 11.2\%}
+    \end{itemize}
+    
+    \column{0.5\textwidth}
+    \textbf{Range Query (Q2):}
+    \begin{itemize}
+      \item Without partitioning: 182 ms
+      \item With partitioning: 127.3 ms
+      \item \textcolor{darkgreen}{Improvement: 30.2\%}
+    \end{itemize}
+  \end{columns}
+  
+  \vspace{1.5em}
+  
+  \textbf{Materialized Views Impact:}
+  \begin{itemize}
+    \item Raw readings: 85,000 rows
+    \item Aggregated (daily): 2,400 rows
+    \item Improvement: \textcolor{darkgreen}{35× reduction}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Concurrency Validation: 4 Scenarios}
+  \textbf{Scenario 1: Ingestion vs. Dashboard Reads}
+  \begin{itemize}
+    \item MVCC isolation prevents read blocking
+    \item Dashboard latency: <100 ms maintained [OK]
+  \end{itemize}
+  
+  \vspace{0.5em}
+  
+  \textbf{Scenario 2: Multiple Concurrent Dashboards}
+  \begin{itemize}
+    \item 100 concurrent users → 140 req/sec throughput
+    \item Read-heavy, low-contention scenario [OK]
+  \end{itemize}
+  
+  \vspace{0.5em}
+  
+  \textbf{Scenario 3: Batch Aggregation Jobs}
+  \begin{itemize}
+    \item Daily 1 AM off-peak aggregation
+    \item Completes in <30 seconds [OK]
+  \end{itemize}
+  
+  \vspace{0.5em}
+  
+  \textbf{Scenario 4: Hot Data Queries}
+  \begin{itemize}
+    \item Recent timestamp filters at 500 concurrent users
+    \item Partial indexes maintain <150 ms latency [OK]
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Scalability Projections}
+  \textbf{Current Deployment (Baseline):}
+  \begin{itemize}
+    \item Peak concurrent users: 50--100
+    \item CPU utilization: 70--75\%
+    \item Hardware: 4 vCPU, 16 GB RAM
+  \end{itemize}
+  
+  \vspace{1em}
+  
+  \textbf{Scaling Predictions:}
+  
+  \begin{center}
+    \begin{tabular}{lll}
+      \toprule
+      \textbf{Scale} & \textbf{Users} & \textbf{Configuration} \\
+      \midrule
+      Current & 50--100 & 4 vCPU, 16 GB \\
+      Vertical & 500--1000 & 8+ vCPU, 32+ GB \\
+      Distributed & 10K+ & Read replicas + sharding \\
+      \bottomrule
+    \end{tabular}
+  \end{center}
+  
+  \vspace{1em}
+  
+  \textbf{Data Growth:} 3.06M rows (3 years) → 10 GB storage (10 years) with partitioning
+\end{frame}
+
+% ===== SECTION 6: CONCLUSIONS =====
+\section{Conclusions}
+
+\begin{frame}{Key Achievements}
+  \begin{enumerate}
+    \item \textbf{Normalized 3NF Schema}: 8-entity design enforcing referential integrity
+    
+    \item \textbf{Query-Optimized Performance}: Sub-100ms latencies validated through PostgreSQL EXPLAIN ANALYZE
+    
+    \item \textbf{Multi-Source Integration}: 216 readings/hour sustained without MVCC contention
+    
+    \item \textbf{Transparent Personalization}: Rule-based health guidance mapped to EPA/WHO standards
+    
+    \item \textbf{Production-Ready Concurrency}: 4 realistic scenarios validated; supports 500 concurrent users at <150ms latency
+  \end{enumerate}
+\end{frame}
+
+\begin{frame}{Future Work}
+  \textbf{Short-term (6 months):}
+  \begin{itemize}
+    \item TimescaleDB hypertables for native time-series optimization
+    \item MinIO object storage for raw JSON archival and audit trails
+  \end{itemize}
+  
+  \vspace{0.5em}
+  
+  \textbf{Medium-term (12 months):}
+  \begin{itemize}
+    \item PostGIS spatial interpolation and heatmap generation
+    \item Machine learning forecasting (LSTM/GRU for 24-hour pollution predictions)
+  \end{itemize}
+  
+  \vspace{0.5em}
+  
+  \textbf{Long-term (18+ months):}
+  \begin{itemize}
+    \item High availability with read replicas and automated failover (99.9\% uptime)
+    \item Multi-city scaling to Medellín, Cali, and other Latin American hubs
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Broader Impact}
+  \begin{block}{Scientific Contribution}
+    Provides a \textit{replicable, open-source foundation} for urban air quality monitoring in resource-constrained regions
+  \end{block}
+  
+  \begin{block}{Societal Impact}
+    \begin{itemize}
+      \item Empowers citizens with transparent, explainable health recommendations
+      \item Eliminates proprietary black-box algorithms
+      \item Supports evidence-based urban planning and pollution mitigation policies
+    \end{itemize}
+  \end{block}
+  
+  \begin{block}{Scalability}
+    Generalizable to other Latin American cities facing similar air quality challenges
+  \end{block}
+\end{frame}
+
+\begin{frame}[plain,c]
+  \begin{center}
+    {\Huge Thank You}
+    
+    \vspace{2em}
+    
+    Questions? \\
+    \vspace{1em}
+    
+    {\small \texttt{Contact: project@example.com}}
+  \end{center}
+\end{frame}
+
+\end{document}
