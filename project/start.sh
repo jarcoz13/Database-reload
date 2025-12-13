@@ -88,7 +88,11 @@ fi
 
 # Check Frontend
 echo -n "Frontend: "
-if curl -s http:/ 2>&1 | grep -v "WARN\[0000\]"
+if curl -s http://localhost:5173 > /dev/null 2>&1; then
+    echo "✅ Running"
+else
+    echo "❌ Not ready (may still be starting...)"
+fi
 
 # Check if backend and frontend are running
 BACKEND_RUNNING=$(docker compose ps | grep airquality_backend | grep -c "Up")

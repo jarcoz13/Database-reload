@@ -1,0 +1,30 @@
+\section{Introduction}
+
+Air quality degradation in urban centers has become a persistent environmental and public health crisis. According to the World Health Organization, air pollution causes approximately 7 million premature deaths annually, with particulate matter (PM$_{2.5}$ and PM$_{10}$) representing the primary risk factor in urban environments. In Bogotá, Colombia---a city of approximately 8 million residents located at 2,640 meters elevation where topography restricts air circulation---PM$_{2.5}$ concentrations frequently exceed 100 $\mu$g/m$^3$, reaching levels classified as ``unhealthy'' or ``very unhealthy'' by EPA Air Quality Index (AQI) standards.
+
+Despite the existence of multiple air quality data providers (AQICN, Google Maps Air Quality API, IQAir), citizens and municipal policymakers face significant barriers to accessing timely, integrated, and personalized air quality information. Current challenges include:
+
+\begin{itemize}
+    \item \textbf{Data Fragmentation:} Air quality measurements from different providers exist in isolated silos with no unified interface for citizens or researchers.
+    \item \textbf{Lack of Personalization:} Generic AQI indices do not account for individual health vulnerabilities (age, respiratory conditions, activity levels).
+    \item \textbf{Delayed Information:} Most publicly available platforms update infrequently (hourly or longer intervals), limiting responsiveness to acute pollution events.
+    \item \textbf{Limited Accessibility:} Existing tools require technical expertise to query and are not designed for diverse citizen demographics.
+\end{itemize}
+
+To address these gaps, this paper presents a comprehensive, production-oriented architecture for a real-time air quality monitoring and recommendation system designed specifically for Bogotá's deployment context. The system integrates periodic data ingestion from multiple providers, normalizes heterogeneous payloads into a unified relational schema, performs efficient analytical queries over multi-year datasets, and delivers explainable health recommendations to end users.
+
+\subsection*{Main Contributions:}
+
+\begin{enumerate}
+    \item \textbf{Normalized Relational Schema:} A Third Normal Form (3NF) database design that eliminates redundancy, enforces referential integrity, and supports efficient queries across 8 core entities (Station, Pollutant, Provider, AirQualityReading, AppUser, Alert, Recommendation, ProductRecommendation).
+    
+    \item \textbf{Query-Optimized Indexing and Partitioning:} Composite B-tree indexes and temporal partitioning strategies validated through \texttt{EXPLAIN ANALYZE} measurements showing sub-100 ms latencies for 5 core queries on 85,000-row datasets.
+    
+    \item \textbf{Multi-Source Data Integration Pipeline:} A Python-based scheduler that polls external APIs every 10 minutes, validates payloads using Pydantic models, deduplicates readings, and performs transactional inserts with MVCC isolation.
+    
+    \item \textbf{Transparent Recommendation Engine:} A deterministic, rule-based system that maps AQI ranges to evidence-based health recommendations aligned with EPA and WHO guidelines, enabling citizen agency without black-box machine learning.
+    
+    \item \textbf{Concurrency and Scalability Analysis:} Documented mitigation strategies (MVCC isolation, row-level locking, partition pruning) validated against 4 realistic concurrency scenarios specific to Bogotá deployment parameters (50--100 peak concurrent users, 216 readings/hour ingestion).
+\end{enumerate}
+
+The paper is organized as follows: Section 2 describes the normalized database schema and its mapping to air quality domain concepts. Section 3 details the query optimization and indexing strategies with performance validation results. Section 4 presents the multi-source ingestion architecture and data normalization pipeline. Section 5 discusses the recommendation logic and integration with the relational schema. Section 6 provides experimental validation of the design decisions through performance measurements and concurrency analysis. Section 7 concludes with deployment recommendations, limitations, and future work.
