@@ -1,0 +1,67 @@
+@startuml data_pipeline
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontSize 11
+
+title Data Ingestion Pipeline
+
+participant "External\nAPIs" as api
+participant "Ingestion\nJob" as job
+participant "Validator" as val
+participant "Normalizer" as norm
+participant "PostgreSQL" as db
+participant "Redis\nCache" as cache
+
+== Every 10 Minutes ==
+
+api -> job : Poll data
+activate job
+
+job -> job : Fetch JSON\npayloads
+
+job -> val : Validate schema
+activate val
+
+val -> val : Check data types\nVerify timestamps
+
+alt Valid data
+    val -> norm : Pass to normalizer
+    activate norm
+    
+    norm -> norm : Normalize units\nConvert to UTC\nDeduplicate
+    
+    norm -> db : Upsert readings
+    activate db
+    
+    db -> db : Insert/Update\nwith MVCC
+    
+    db --> norm : Confirm
+    deactivate db
+    
+    norm --> val : Success
+    deactivate norm
+    
+    val --> job : Complete
+    deactivate val
+    
+    job -> cache : Invalidate\ncache keys
+    activate cache
+    
+    cache --> job : Done
+    deactivate cache
+    
+else Invalid data
+    val -> val : Log error
+    val --> job : Reject
+    deactivate val
+end
+
+deactivate job
+
+note right of db
+    Zero-downtime ingestion
+    MVCC isolation
+    No read blocking
+end note
+
+@enduml

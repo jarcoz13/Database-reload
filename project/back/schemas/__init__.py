@@ -97,7 +97,7 @@ class AlertBase(BaseModel):
     notification_method: str = "in-app"
 
 class AlertCreate(AlertBase):
-    pass
+    is_active: Optional[bool] = True
 
 class AlertUpdate(BaseModel):
     threshold: Optional[float] = None

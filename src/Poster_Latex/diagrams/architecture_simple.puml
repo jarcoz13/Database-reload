@@ -1,0 +1,19 @@
+@startsalt architecture
+{#
+<b>Layer 1: Data Sources
+. AQICN API | Google Air Quality API | IQAir API
+--
+<b>Layer 2: Ingestion & Processing  
+. Ingestion Job (10 min cycle - 216 readings/hour)
+. Normalizer | Validator
+--
+<b>Layer 3: Data Persistence
+. PostgreSQL (8 entities, 3NF) | MongoDB (Preferences)
+--
+<b>Layer 4: Application & API
+. FastAPI REST | Redis Cache | PgBouncer | Recommendation Engine
+--
+<b>Layer 5: Presentation
+. React/Vue Dashboard | Real-time Charts | Heatmaps
+}
+@endsalt

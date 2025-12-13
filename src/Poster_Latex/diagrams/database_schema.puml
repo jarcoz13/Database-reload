@@ -1,0 +1,109 @@
+@startuml database_schema
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontSize 10
+skinparam linetype ortho
+
+title Database Schema - 8 Entities (3NF)
+
+entity "Station" as station {
+    * id : INT <<PK>>
+    --
+    name : VARCHAR
+    city : VARCHAR
+    latitude : DECIMAL
+    longitude : DECIMAL
+    provider_id : INT <<FK>>
+}
+
+entity "Pollutant" as pollutant {
+    * id : INT <<PK>>
+    --
+    name : VARCHAR
+    unit : VARCHAR
+    description : TEXT
+}
+
+entity "Provider" as provider {
+    * id : INT <<PK>>
+    --
+    name : VARCHAR
+    api_endpoint : VARCHAR
+}
+
+entity "AirQualityReading" as reading {
+    * id : BIGINT <<PK>>
+    --
+    station_id : INT <<FK>>
+    pollutant_id : INT <<FK>>
+    datetime : TIMESTAMP
+    value : DECIMAL
+    aqi : INT
+    provider_id : INT <<FK>>
+}
+
+entity "AirQualityDailyStats" as stats {
+    * id : BIGINT <<PK>>
+    --
+    station_id : INT <<FK>>
+    pollutant_id : INT <<FK>>
+    date : DATE
+    avg_value : DECIMAL
+    max_aqi : INT
+    min_aqi : INT
+    count : INT
+}
+
+entity "AppUser" as user {
+    * id : INT <<PK>>
+    --
+    name : VARCHAR
+    email : VARCHAR
+    password_hash : VARCHAR
+    status : VARCHAR
+}
+
+entity "Alert" as alert {
+    * id : BIGINT <<PK>>
+    --
+    user_id : INT <<FK>>
+    station_id : INT <<FK>>
+    pollutant_id : INT <<FK>>
+    threshold : DECIMAL
+    is_active : BOOLEAN
+}
+
+entity "Recommendation" as rec {
+    * id : BIGINT <<PK>>
+    --
+    user_id : INT <<FK>>
+    aqi_range : VARCHAR
+    message : TEXT
+    created_at : TIMESTAMP
+}
+
+' Relationships
+station }o--|| provider
+reading }o--|| station
+reading }o--|| pollutant
+reading }o--|| provider
+stats }o--|| station
+stats }o--|| pollutant
+alert }o--|| user
+alert }o--|| station
+alert }o--|| pollutant
+rec }o--|| user
+
+note right of reading
+    Monthly partitioning
+    85,000+ readings
+    Composite indexes
+end note
+
+note right of stats
+    Materialized view
+    35× row reduction
+    Daily aggregates
+end note
+
+@enduml

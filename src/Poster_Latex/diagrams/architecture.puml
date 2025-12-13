@@ -1,0 +1,71 @@
+@startuml architecture
+!pragma layout smetana
+
+title System Architecture - 5 Layers
+
+!define LAYER1 #E8F5E9
+!define LAYER2 #FFF3E0
+!define LAYER3 #E3F2FD
+!define LAYER4 #F3E5F5
+!define LAYER5 #FCE4EC
+
+package "Layer 1: Data Sources" as sources {
+    component [AQICN API] as aqicn
+    component [Google AQ API] as google
+    component [IQAir API] as iair
+}
+
+package "Layer 2: Ingestion & Processing" as ingestion {
+    component [Ingestion Job\n(10 min cycle)] as job
+    component [Normalizer] as norm
+    component [Validator] as val
+    note right of job
+        216 readings/hour
+        36 readings × 6 cycles
+    end note
+}
+
+package "Layer 3: Data Persistence" as persistence {
+    database "PostgreSQL\n3NF Schema" as pg {
+        component [8 Entities]
+        component [Temporal\nPartitioning]
+        component [Materialized\nViews]
+    }
+    database "MongoDB" as mongo {
+        component [User\nPreferences]
+    }
+}
+
+package "Layer 4: Application & API" as api {
+    component [FastAPI\nREST] as fastapi
+    component [Redis\nCache] as redis
+    component [PgBouncer\nPool] as pgb
+    component [Recommendation\nEngine] as rec
+}
+
+package "Layer 5: Presentation" as presentation {
+    component [React/Vue\nDashboard] as frontend
+    component [Real-time\nCharts] as charts
+    component [Heatmaps] as heat
+}
+
+' Connections
+aqicn --> job
+google --> job
+iair --> job
+
+job --> norm
+norm --> val
+val --> pg
+
+pg --> pgb
+pgb --> fastapi
+fastapi --> redis
+fastapi --> rec
+mongo --> fastapi
+
+fastapi --> frontend
+frontend --> charts
+frontend --> heat
+
+@enduml

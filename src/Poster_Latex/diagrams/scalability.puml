@@ -1,0 +1,57 @@
+@startuml scalability
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontSize 11
+
+title Scalability & Performance
+
+package "Current Performance" {
+    card "50-100 concurrent users" as users #90EE90
+    card "70-75% CPU usage" as cpu #FFFF99
+    card "Sub-150ms latency" as latency #90EE90
+    card "140 req/sec throughput" as throughput #90EE90
+}
+
+package "Scaling Strategy" {
+    card "Vertical: 8+ vCPUs" as vertical
+    card "→ 1,000+ users" as scale1
+    
+    card "Horizontal: Read replicas" as horizontal
+    card "→ Multi-region" as scale2
+    
+    card "Partitioning: Monthly" as partition
+    card "→ 78% improvement" as scale3
+}
+
+package "10-Year Projection" {
+    card "525M+ readings" as readings
+    card "Partition pruning" as pruning #90EE90
+    card "Consistent latency" as perf #90EE90
+}
+
+users --> vertical : scale
+vertical --> scale1
+
+users --> horizontal : distribute
+horizontal --> scale2
+
+cpu --> partition : optimize
+partition --> scale3
+
+scale1 --> readings : 10 years
+scale2 --> readings
+scale3 --> pruning
+pruning --> perf
+
+note right of partition
+    Monthly partitioning
+    Constraint exclusion
+    Efficient pruning
+end note
+
+note bottom of perf
+    Maintains sub-200ms
+    with billions of rows
+end note
+
+@enduml

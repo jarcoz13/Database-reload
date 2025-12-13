@@ -1,0 +1,404 @@
+%==============================================================================
+% Poster Template - Air Quality Monitoring System
+%==============================================================================
+\documentclass[final,t]{beamer}
+\mode<presentation>{\usetheme{Berlin}}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish,es-nodecimaldot]{babel}
+\usepackage[orientation=portrait,size=a0,scale=1.3]{beamerposter}
+\usepackage[absolute,overlay]{textpos}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tikz}
+\usepackage{tcolorbox}
+\usepackage{multicol}
+\usepackage{adjustbox}
+\usepackage{caption}
+\usepackage{amssymb}
+\usepackage{pifont}
+\newcommand{\cmark}{\ding{51}}
+\newcommand{\xmark}{\ding{55}}
+
+% Colors
+\definecolor{udblue}{RGB}{0,48,135}
+\definecolor{udgreen}{RGB}{0,128,96}
+\definecolor{lightblue}{RGB}{173,216,230}
+\definecolor{lightgray}{RGB}{245,245,245}
+\definecolor{darkgray}{RGB}{100,100,100}
+
+\setbeamercolor{block title}{fg=white,bg=udblue}
+\setbeamercolor{block body}{fg=black,bg=lightgray}
+\setbeamercolor{block alerted title}{fg=white,bg=udgreen}
+\setbeamercolor{block alerted body}{fg=black,bg=white}
+
+% Custom block with border
+\setbeamertemplate{block begin}{
+  \par\vskip\medskipamount%
+  \begin{beamercolorbox}[colsep*=.75ex]{block title}
+    \usebeamerfont*{block title}\insertblocktitle%
+  \end{beamercolorbox}%
+  {\parskip0pt\par}%
+  \ifbeamercolorempty[bg]{block title}
+  {}
+  {\ifbeamercolorempty[bg]{block body}{}{\nointerlineskip\vskip-0.5pt}}%
+  \usebeamerfont{block body}%
+  \begin{beamercolorbox}[colsep*=.75ex,vmode]{block body}%
+    \ifbeamercolorempty[bg]{block body}{\vskip-.25ex}{\vskip-.75ex}\vbox{}%
+}
+
+\graphicspath{{images/}}
+
+%==============================================================================
+\title{\VERYHuge Architecture for Real-Time Air Quality Monitoring and Personalized Health Recommendations in Bogotá}
+\author{\Large Jose Alejandro Cortazar López, Johan Esteban Castaño Martínez, Stivel Pinilla Puerta}
+\institute{\large Systems Engineering Program\\Francisco José de Caldas District University}
+\date{}
+
+%==============================================================================
+\begin{document}
+\begin{frame}[t]
+
+% Header with logos
+\begin{columns}[T]
+\begin{column}{0.15\linewidth}
+\begin{center}
+\includegraphics[width=0.7\linewidth]{logo_escudo_vertical}
+\end{center}
+\end{column}
+\begin{column}{0.7\linewidth}
+\begin{center}
+\usebeamerfont{title}\textcolor{udblue}{\inserttitle}\\[0.5cm]
+\usebeamerfont{author}\insertauthor\\[0.3cm]
+\usebeamerfont{institute}\insertinstitute
+\end{center}
+\end{column}
+\begin{column}{0.15\linewidth}
+\begin{center}
+\includegraphics[width=0.7\linewidth]{identidad_facultad-02}
+\end{center}
+\end{column}
+\end{columns}
+
+\vspace{1cm}
+
+%==============================================================================
+% MAIN CONTENT
+%==============================================================================
+
+\begin{columns}[T]
+
+%------------------------------------------------------------------------------
+% LEFT COLUMN
+%------------------------------------------------------------------------------
+\begin{column}{0.32\linewidth}
+
+% ABSTRACT
+\begin{block}{Abstract}
+\large
+Air pollution is a critical public health challenge in Bogotá. This work presents a \textbf{production-ready architecture} for real-time air quality monitoring that integrates heterogeneous data sources (AQICN, Google Air Quality API, IQAir) into a unified PostgreSQL schema with \textbf{sub-150ms query latencies} and personalized health recommendations.
+
+\vspace{0.3cm}
+\textbf{Key achievements:}
+\begin{itemize}
+\item 3NF database schema (8 entities)
+\item 85,000+ readings processed
+\item 216 readings/hour ingestion rate
+\item EPA/WHO compliant recommendations
+\end{itemize}
+\end{block}
+
+\vspace{0.5cm}
+
+% PROBLEM STATEMENT
+\begin{block}{Problem Statement}
+\large
+Bogotá residents lack access to integrated air quality data across multiple monitoring sources. Current systems are:
+
+\vspace{0.3cm}
+\begin{itemize}
+\item \textbf{Fragmented:} Multiple platforms with inconsistent formats
+\item \textbf{Not personalized:} No health guidance for vulnerable groups
+\item \textbf{Technical:} Complex indicators (PM$_{2.5}$, AQI, NO$_2$)
+\item \textbf{Quota-limited:} API restrictions complicate monitoring
+\item \textbf{Delayed:} Hourly aggregations miss rapid events
+\end{itemize}
+
+\vspace{0.3cm}
+\textbf{Impact:} 8 million residents exposed to PM$_{2.5}$ levels exceeding WHO guidelines (13.1 vs 5 $\mu$g/m$^3$).
+\end{block}
+
+\vspace{0.5cm}
+
+% OBJECTIVES
+\begin{block}{Key Objectives}
+\large
+\textbf{Primary Goal:} Design a centralized platform integrating multi-source air quality data with personalized recommendations.
+
+\vspace{0.3cm}
+\textbf{Specific Objectives:}
+\begin{enumerate}
+\item \textbf{O1:} Scalable PostgreSQL architecture with temporal partitioning
+\item \textbf{O2:} Unified ingestion pipeline (10-min cycle)
+\item \textbf{O3:} Sub-200ms query performance
+\item \textbf{O4:} Rule-based recommendation engine
+\item \textbf{O5:} REST API with pagination support
+\item \textbf{O6:} Performance validation \& benchmarking
+\end{enumerate}
+\end{block}
+
+\vspace{0.5cm}
+
+% DATABASE SCHEMA
+\begin{block}{Database Schema (3NF)}
+\large
+\begin{center}
+\includegraphics[width=0.95\linewidth]{database_schema_new}
+\end{center}
+
+\vspace{0.3cm}
+\textbf{8 Normalized Entities:}
+\begin{itemize}
+\item \textbf{Geospatial:} Station, Pollutant, Provider
+\item \textbf{Data:} AirQualityReading, DailyStats
+\item \textbf{Users:} AppUser, Alert, Recommendation
+\end{itemize}
+
+\vspace{0.3cm}
+\textbf{Key Features:}
+\begin{itemize}
+\item Monthly partitioning (78\% improvement)
+\item Composite B-tree indexes
+\item Materialized views (35× reduction)
+\item Referential integrity constraints
+\end{itemize}
+\end{block}
+
+\end{column}
+
+%------------------------------------------------------------------------------
+% MIDDLE COLUMN
+%------------------------------------------------------------------------------
+\begin{column}{0.32\linewidth}
+
+% SYSTEM ARCHITECTURE
+\begin{block}{System Architecture (5 Layers)}
+\large
+\begin{center}
+\includegraphics[width=0.95\linewidth]{architecture_new}
+\end{center}
+
+\vspace{0.3cm}
+\textbf{Layer 1 -- Data Sources:}
+\begin{itemize}
+\item AQICN, Google Air Quality API, IQAir
+\end{itemize}
+
+\textbf{Layer 2 -- Ingestion:}
+\begin{itemize}
+\item APScheduler (10-min cycle)
+\item 216 readings/hour (6 stations × 6 pollutants)
+\item JSON validation \& normalization
+\end{itemize}
+
+\textbf{Layer 3 -- Persistence:}
+\begin{itemize}
+\item PostgreSQL (3NF, 8 entities)
+\item MongoDB (user preferences)
+\end{itemize}
+
+\textbf{Layer 4 -- Application:}
+\begin{itemize}
+\item FastAPI REST endpoints
+\item Redis cache (5-10 min TTL)
+\item PgBouncer connection pooling
+\item Rule-based recommendation engine
+\end{itemize}
+
+\textbf{Layer 5 -- Presentation:}
+\begin{itemize}
+\item React/Vue.js dashboard
+\item Real-time charts \& heatmaps
+\end{itemize}
+\end{block}
+
+\vspace{0.5cm}
+
+% DATA PIPELINE
+\begin{block}{Data Ingestion Pipeline}
+\large
+\begin{center}
+\includegraphics[width=0.95\linewidth]{data_pipeline}
+\end{center}
+
+\vspace{0.3cm}
+\textbf{Pipeline Features:}
+\begin{itemize}
+\item \textbf{Validation:} Pydantic schema validation
+\item \textbf{Normalization:} UTC timestamps, canonical units
+\item \textbf{Deduplication:} Idempotent upserts
+\item \textbf{MVCC:} Zero-downtime concurrent operations
+\item \textbf{Error handling:} Logging \& retry mechanisms
+\end{itemize}
+
+\vspace{0.3cm}
+\textbf{Data Flow:}
+\begin{itemize}
+\item External APIs → Ingestion Job (every 10 min)
+\item Validator → Normalizer → PostgreSQL
+\item Cache invalidation on new data
+\end{itemize}
+\end{block}
+
+\vspace{0.5cm}
+
+% QUERY OPTIMIZATION
+\begin{block}{Query Optimization Techniques}
+\large
+\textbf{Indexing Strategy:}
+\begin{itemize}
+\item Composite indexes: (station, pollutant, datetime)
+\item Partial indexes for recent data (7 days)
+\item B-tree indexes on foreign keys
+\end{itemize}
+
+\vspace{0.3cm}
+\textbf{Performance Enhancements:}
+\begin{itemize}
+\item Temporal partitioning (30.2\% improvement)
+\item Materialized views (35× row reduction)
+\item Redis caching (5-10 min TTL)
+\item PgBouncer connection pooling
+\item MVCC for concurrent reads/writes
+\end{itemize}
+\end{block}
+
+\end{column}
+
+%------------------------------------------------------------------------------
+% RIGHT COLUMN
+%------------------------------------------------------------------------------
+\begin{column}{0.32\linewidth}
+
+% QUERY PERFORMANCE
+\begin{block}{Query Performance Results}
+\large
+\begin{center}
+\includegraphics[width=0.95\linewidth]{query_performance_new}
+\end{center}
+
+\vspace{0.3cm}
+\textbf{Performance on 85,000 readings:}
+
+\vspace{0.2cm}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Query} & \textbf{Latency} & \textbf{Status} \\
+\midrule
+Q1: Latest readings & 42.8 ms & \textcolor{udgreen}{\cmark} \\
+Q2: Monthly averages & 127.3 ms & \textcolor{udgreen}{\cmark} \\
+Q3: Active alerts & 143.6 ms & \textcolor{udgreen}{\cmark} \\
+Q4: Data completeness & 87.5 ms & \textcolor{udgreen}{\cmark} \\
+Q5: Recommendations & 73.9 ms & \textcolor{udgreen}{\cmark} \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.3cm}
+\textbf{All queries < 150ms} validated with EXPLAIN ANALYZE
+\end{block}
+
+\vspace{0.5cm}
+
+% SCALABILITY
+\begin{block}{Scalability \& Performance}
+\large
+\begin{center}
+\includegraphics[width=0.95\linewidth]{scalability_new}
+\end{center}
+
+\vspace{0.3cm}
+\textbf{Current Capacity:}
+\begin{itemize}
+\item 50--100 concurrent users
+\item 70--75\% CPU usage
+\item Sub-150ms latency
+\item 140 requests/second throughput
+\end{itemize}
+
+\vspace{0.3cm}
+\textbf{Scaling Strategies:}
+\begin{itemize}
+\item \textbf{Vertical:} 8+ vCPUs → 1,000+ users
+\item \textbf{Horizontal:} Read replicas + load balancer
+\item \textbf{Partitioning:} 78\% latency improvement
+\end{itemize}
+
+\vspace{0.3cm}
+\textbf{10-Year Projection:}
+\begin{itemize}
+\item 525M+ readings supported
+\item Partition pruning maintains performance
+\item Consistent sub-200ms latency
+\end{itemize}
+\end{block}
+
+\vspace{0.5cm}
+
+% RECOMMENDATIONS ENGINE
+\begin{alertblock}{Personalization Engine}
+\large
+\textbf{Rule-based health guidance} mapping AQI thresholds to recommendations:
+
+\vspace{0.3cm}
+\begin{itemize}
+\item Age-specific advice (children, elderly)
+\item Respiratory condition considerations
+\item Activity level adjustments
+\item EPA/WHO AQI standard compliance
+\end{itemize}
+
+\vspace{0.3cm}
+\textbf{Example:} PM$_{2.5}$ > 150 $\mu$g/m$^3$ → "Unhealthy air quality. Wear N95 mask. Avoid outdoor activities."
+\end{alertblock}
+
+\vspace{0.5cm}
+
+% CONCLUSIONS
+\begin{block}{Conclusions \& Impact}
+\large
+\textbf{Achievements:}
+\begin{itemize}
+\item \textbf{Production-ready} architecture validated for city-scale monitoring
+\item \textbf{Sub-150ms} query latencies across all use cases
+\item \textbf{216 readings/hour} sustained without contention
+\item \textbf{Transparent recommendations} aligned with EPA/WHO
+\item \textbf{Concurrency validation} at 500 concurrent users
+\end{itemize}
+
+\vspace{0.3cm}
+\textbf{Future Work:}
+\begin{itemize}
+\item TimescaleDB hypertables for time-series optimization
+\item ML-based pollution forecasting (LSTM/GRU)
+\item PostGIS spatial heatmaps \& geofencing
+\item Multi-city scaling (Medellín, Cali)
+\item High availability with read replicas (99.9\% uptime)
+\end{itemize}
+
+\vspace{0.3cm}
+\textbf{Broader Impact:} Open-source foundation enabling air quality monitoring in resource-constrained regions. Empowers citizens with evidence-based health decisions and supports urban planning policies.
+\end{block}
+
+\end{column}
+
+\end{columns}
+
+\vspace{0.5cm}
+
+% Footer
+\begin{center}
+\large
+\textcolor{darkgray}{Francisco José de Caldas District University -- Systems Engineering Program -- December 2025}
+\end{center}
+
+\end{frame}
+\end{document}
